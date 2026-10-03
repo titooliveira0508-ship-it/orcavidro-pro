@@ -232,13 +232,8 @@ function corpo(
       const m = 6;
       const gap = 4;
       if (n >= 4) {
-        // 4 folhas: grade 2 x 2 — bem diferente do modelo 2 folhas
-        const pw = (w - 2 * m - gap) / 2;
-        const ph = (h - 2 * m - gap) / 2;
-        s += painel(x + m, y + m, pw, ph);
-        s += painel(x + m + pw + gap, y + m, pw, ph);
-        s += painel(x + m, y + m + ph + gap, pw, ph);
-        s += painel(x + m + pw + gap, y + m + ph + gap, pw, ph);
+        // 4 folhas: 4 painéis lado a lado (janela de correr)
+        s += paineisVerticais(4, x, y, w, h, m, gap);
         s += `<rect x="${f(x + w / 2 - 2.5)}" y="${f(y + h / 2 - 9)}" width="5" height="18" rx="2" fill="${CIANO}"/>`;
       } else {
         s += paineisVerticais(2, x, y, w, h, m, gap);
