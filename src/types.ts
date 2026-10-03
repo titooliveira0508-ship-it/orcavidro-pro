@@ -27,6 +27,7 @@ export interface ItemOrcamento {
   categoriaNome: string;
   subOpcao?: string; // rótulo da sub-opção escolhida (ex.: "3 folhas")
   larguraMm?: number;
+  largura2Mm?: number; // segunda largura (ex.: box de canto 900x900)
   alturaMm?: number;
   alturaOpcao: AlturaOpcao;
   corVidro: string;

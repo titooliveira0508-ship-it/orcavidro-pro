@@ -28,6 +28,7 @@ function parseNumero(texto: string): number {
 export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   const [subOpcao, setSubOpcao] = useState(categoria.subOpcoes?.[0]?.id ?? '');
   const [largura, setLargura] = useState('');
+  const [largura2, setLargura2] = useState(''); // segunda largura (box de canto)
   const [altura, setAltura] = useState('');
   const [alturaOpcao, setAlturaOpcao] = useState<AlturaOpcao>(
     CATEGORIAS_PORTA.includes(categoria.id) ? '2100' : '1900'
@@ -63,6 +64,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       categoriaNome: categoria.nome,
       subOpcao: subOpcaoRotulo,
       larguraMm: largura ? parseNumero(largura) : undefined,
+      largura2Mm: categoria.id === 'box-canto' && largura2 ? parseNumero(largura2) : undefined,
       alturaMm: alturaOpcao === 'piso-teto' ? undefined : altura ? parseNumero(altura) : undefined,
       alturaOpcao,
       corVidro,
@@ -133,27 +135,55 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={rotulo}>Largura (mm)</label>
+            <label className={rotulo}>
+              {categoria.id === 'box-canto' ? 'Largura 1 (mm)' : 'Largura (mm)'}
+            </label>
             <input
               inputMode="numeric"
-              placeholder="Ex.: 1200"
+              placeholder="Ex.: 900"
               value={largura}
               onChange={(e) => setLargura(e.target.value)}
               className={campo}
             />
           </div>
+          {categoria.id === 'box-canto' ? (
+            <div>
+              <label className={rotulo}>Largura 2 (mm)</label>
+              <input
+                inputMode="numeric"
+                placeholder="Ex.: 900"
+                value={largura2}
+                onChange={(e) => setLargura2(e.target.value)}
+                className={campo}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className={rotulo}>Altura (mm)</label>
+              <input
+                inputMode="numeric"
+                placeholder="Ex.: 1900"
+                value={altura}
+                onChange={(e) => setAltura(e.target.value)}
+                disabled={alturaOpcao === 'piso-teto'}
+                className={`${campo} disabled:bg-slate-100 disabled:text-slate-400`}
+              />
+            </div>
+          )}
+        </div>
+        {categoria.id === 'box-canto' && (
           <div>
             <label className={rotulo}>Altura (mm)</label>
             <input
               inputMode="numeric"
-              placeholder="Ex.: 1900"
+              placeholder="Ex.: 1800"
               value={altura}
               onChange={(e) => setAltura(e.target.value)}
               disabled={alturaOpcao === 'piso-teto'}
               className={`${campo} disabled:bg-slate-100 disabled:text-slate-400`}
             />
           </div>
-        </div>
+        )}
 
         {opcoesAltura.length > 0 && (
           <div>

@@ -33,7 +33,11 @@ function detalhesItem(item: ItemOrcamento): string {
   const partes: string[] = [];
   if (item.subOpcao) partes.push(item.subOpcao);
   const medidas: string[] = [];
-  if (item.larguraMm) medidas.push(`L ${item.larguraMm} mm`);
+  if (item.larguraMm && item.largura2Mm) {
+    medidas.push(`L ${item.larguraMm} × ${item.largura2Mm} mm`);
+  } else if (item.larguraMm) {
+    medidas.push(`L ${item.larguraMm} mm`);
+  }
   medidas.push(`A ${rotuloAltura(item)}`);
   partes.push(medidas.join(' × '));
   partes.push(`Vidro ${item.corVidro}`);
