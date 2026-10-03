@@ -114,24 +114,40 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
   }
 
   // ── Cabeçalho da empresa ──────────────────────────────────────────────
+  // Logo oficial (se falhar, segue o layout sem ela)
+  let temLogo = false;
+  try {
+    const logoBase64 = await carregarImagem('/logo.png');
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'PNG', margem, y - 3, 18, 27);
+      temLogo = true;
+    }
+  } catch {
+    temLogo = false;
+  }
+  const xCab = temLogo ? margem + 22 : margem;
+  const largCab = larguraUtil - (temLogo ? 22 : 0);
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(...COR_TEMA);
-  doc.text(d.empresa.nome || 'OrçaVidro Pro', margem, y);
+  doc.text(d.empresa.nome || 'OrçaVidro Pro', xCab, y);
   y += 7;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(...CINZA);
   if (d.empresa.endereco) {
-    const linhas = doc.splitTextToSize(d.empresa.endereco, larguraUtil);
-    doc.text(linhas, margem, y);
+    const linhas = doc.splitTextToSize(d.empresa.endereco, largCab);
+    doc.text(linhas, xCab, y);
     y += linhas.length * 5;
   }
   if (d.empresa.telefone) {
-    doc.text(`Tel/WhatsApp: ${d.empresa.telefone}`, margem, y);
+    doc.text(`Tel/WhatsApp: ${d.empresa.telefone}`, xCab, y);
     y += 5;
   }
+  // Garante que o conteúdo seguinte comece abaixo da logo
+  if (temLogo) y = Math.max(y, 44);
   y += 2;
 
   // Linha divisória
