@@ -132,7 +132,7 @@ export function alturasParaCategoria(categoriaId: string): { valor: AlturaOpcao;
   if (CATEGORIAS_PORTA.includes(categoriaId)) {
     return [{ valor: '2100', rotulo: '2100 (padrão)' }];
   }
-  if (CATEGORIAS_BOX.includes(categoriaId)) {
+  if (CATEGORIAS_BOX.includes(categoriaId) || categoriaId === 'cortina-vidro') {
     return ALTURAS;
   }
   if (['bascula', 'armario-pia', 'guarda-corpo', 'espelho'].includes(categoriaId)) {
