@@ -218,18 +218,23 @@ function corpo(
       return s;
     }
     case 'box-canto': {
-      // vista frontal do box de canto: duas paredes de vidro em L
+      // box de canto: vista 3/4 mostrando o L (como na referência)
       let s = moldura(x, y, w, h);
-      const cantoX = x + w * 0.55;
-      // parede esquerda (frontal)
-      s += painel(x + 8, y + 10, cantoX - x - 14, h - 24);
-      // parede direita (lateral, em perspectiva simples)
-      const dirW = w - (cantoX - x) - 8;
-      s += `<polygon points="${f(cantoX)},${f(y + 10)} ${f(x + w - 8)},${f(y + 22)} ${f(x + w - 8)},${f(y + h - 14)} ${f(cantoX)},${f(y + h - 14)}" fill="${BG_PAINEL}" stroke="${CIANO}" stroke-width="1.6"/>`;
-      // poste do canto
-      s += `<rect x="${f(cantoX - 3)}" y="${f(y + 8)}" width="6" height="${f(h - 20)}" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
-      // roldanas/trilho superior
-      s += trilho(x + 8, y + 5, cantoX - x - 14);
+      const cantoX = x + w * 0.52;
+      const prof = 26; // profundidade simulada da parede lateral
+      // parede frontal (esquerda)
+      s += painel(x + 10, y + 14, cantoX - x - 16, h - 30);
+      s += trilho(x + 10, y + 8, cantoX - x - 16);
+      // parede lateral em perspectiva (direita)
+      const x2 = x + w - 10;
+      s += `<polygon points="${f(cantoX)},${f(y + 14)} ${f(x2)},${f(y + 14 + prof)} ${f(x2)},${f(y + h - 16 + prof)} ${f(cantoX)},${f(y + h - 16)}" fill="${VIDRO}" stroke="${CIANO}" stroke-width="1.8" opacity="0.9"/>`;
+      // vidro da lateral com divisória
+      s += `<line x1="${f((cantoX + x2) / 2)}" y1="${f(y + 14 + prof / 2)}" x2="${f((cantoX + x2) / 2)}" y2="${f(y + h - 16 + prof / 2)}" stroke="${CIANO}" stroke-width="1.2"/>`;
+      // poste do canto (destaque)
+      s += `<rect x="${f(cantoX - 4)}" y="${f(y + 6)}" width="8" height="${f(h - 20)}" rx="3" fill="${CIANO_FORTE}"/>`;
+      // base
+      s += `<line x1="${f(x + 10)}" y1="${f(y + h - 16)}" x2="${f(cantoX)}" y2="${f(y + h - 16)}" stroke="${CIANO_FORTE}" stroke-width="2.5"/>`;
+      s += `<line x1="${f(cantoX)}" y1="${f(y + h - 16)}" x2="${f(x2)}" y2="${f(y + h - 16 + prof)}" stroke="${CIANO_FORTE}" stroke-width="2.5"/>`;
       return s;
     }
     case 'janelas': {

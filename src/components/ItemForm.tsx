@@ -155,10 +155,11 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
           </div>
         </div>
 
-        <div>
-          <label className={rotulo}>Altura padrão</label>
-          <div className="flex gap-2 flex-wrap">
-            {opcoesAltura.map((a) => (
+        {opcoesAltura.length > 0 && (
+          <div>
+            <label className={rotulo}>Altura padrão</label>
+            <div className="flex gap-2 flex-wrap">
+              {opcoesAltura.map((a) => (
               <button
                 key={a.valor}
                 onClick={() => setAlturaOpcao(a.valor)}
@@ -172,7 +173,8 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
               </button>
             ))}
           </div>
-        </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
