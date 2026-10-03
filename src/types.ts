@@ -86,6 +86,14 @@ export const CORES_KIT = [
   'Dourado',
 ] as const;
 
+/** Cores de kit por categoria: box flex não tem Natural fosco. */
+export function coresKitParaCategoria(categoriaId: string): readonly string[] {
+  if (categoriaId === 'box-flex') {
+    return ['Branco', 'Preto', 'Cromado', 'Dourado'] as const;
+  }
+  return CORES_KIT;
+}
+
 export const MODELOS_DOBRADICA = [
   'GV48',
   'Padrão 90°',

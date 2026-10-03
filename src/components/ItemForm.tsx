@@ -5,6 +5,7 @@ import {
   Categoria,
   CATEGORIAS_PORTA,
   CORES_KIT,
+  coresKitParaCategoria,
   CORES_VIDRO,
   ItemOrcamento,
   MODELOS_DOBRADICA,
@@ -34,6 +35,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
     CATEGORIAS_PORTA.includes(categoria.id) ? '2100' : '1900'
   );
   const opcoesAltura = alturasParaCategoria(categoria.id);
+  const opcoesKit = coresKitParaCategoria(categoria.id);
   const [corVidro, setCorVidro] = useState<string>(CORES_VIDRO[0]);
   const [corKit, setCorKit] = useState<string>(CORES_KIT[0]);
   const [corDobradica, setCorDobradica] = useState<string>(CORES_KIT[0]);
@@ -220,7 +222,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
           <div>
             <label className={rotulo}>Cor do kit</label>
             <select value={corKit} onChange={(e) => setCorKit(e.target.value)} className={campo}>
-              {CORES_KIT.map((c) => (
+              {opcoesKit.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
