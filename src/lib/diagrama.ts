@@ -252,6 +252,9 @@ function corpo(
         s += painel(px, y + 16, pw, h - 28);
         s += roldana(px + pw / 2, y + 8.5);
       }
+      // puxador vertical na última folha
+      const pxUlt = x + 6 + (n - 1) * (pw + gap);
+      s += puxador(pxUlt + pw - 10, y + h / 2 - 18, 36);
       return s;
     }
     case 'porta-pivotante': {
