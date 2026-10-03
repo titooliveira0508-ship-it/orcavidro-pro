@@ -321,6 +321,18 @@ function corpo(
       }
       return s;
     }
+    case 'bascula': {
+      // janela basculante: painel único com ferragens laterais e corrente
+      let s = moldura(x, y, w, h);
+      s += painel(x + 10, y + 10, w - 20, h - 20);
+      // dobradiças laterais
+      s += `<rect x="${f(x + 2)}" y="${f(y + h * 0.3)}" width="10" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      s += `<rect x="${f(x + w - 12)}" y="${f(y + h * 0.3)}" width="10" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      // corrente lateral (típica da báscula)
+      s += `<line x1="${f(x + 16)}" y1="${f(y + 12)}" x2="${f(x + 16)}" y2="${f(y + h - 20)}" stroke="${CIANO}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+      s += `<circle cx="${f(x + 16)}" cy="${f(y + h - 14)}" r="4" fill="${CIANO}"/>`;
+      return s;
+    }
     default: {
       let s = moldura(x, y, w, h);
       s += painel(x + 6, y + 6, w - 12, h - 12);

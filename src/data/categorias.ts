@@ -80,6 +80,12 @@ export const CATEGORIAS: Categoria[] = [
     icone: '🌊',
     ilustracao: '/ilustracoes/cortina-vidro.png',
   },
+  {
+    id: 'bascula',
+    nome: 'Báscula',
+    icone: '🪟',
+    ilustracao: '/ilustracoes/bascula.png',
+  },
 ];
 
 export function getCategoria(id: string): Categoria | undefined {
