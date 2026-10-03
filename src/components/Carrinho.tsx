@@ -1,5 +1,6 @@
 import { ALTURAS, ItemOrcamento } from '../types';
 import { formatarMoeda } from '../lib/storage';
+import { getCategoria } from '../data/categorias';
 
 interface Props {
   itens: ItemOrcamento[];
@@ -32,7 +33,7 @@ export default function Carrinho({ itens, aoRemover, aoLimpar, aoFecharPedido }:
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
         <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
-          🧾 Itens do orçamento ({itens.length})
+          Itens do orçamento ({itens.length})
         </h3>
         {itens.length > 0 && (
           <button onClick={aoLimpar} className="text-xs font-bold text-red-600">
@@ -47,29 +48,40 @@ export default function Carrinho({ itens, aoRemover, aoLimpar, aoFecharPedido }:
         </p>
       ) : (
         <ul className="divide-y divide-slate-100">
-          {itens.map((item) => (
-            <li key={item.id} className="px-4 py-3 flex items-start gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-800">
-                  {item.categoriaNome}
-                  {item.subOpcao ? ` — ${item.subOpcao}` : ''}
-                </p>
-                <p className="text-xs text-slate-500 leading-snug mt-0.5">{descricaoItem(item)}</p>
-                {item.observacao && (
-                  <p className="text-xs text-slate-400 italic mt-0.5">“{item.observacao}”</p>
+          {itens.map((item) => {
+            const ilustracao = getCategoria(item.categoriaId)?.ilustracao;
+            return (
+              <li key={item.id} className="px-4 py-3 flex items-start gap-3">
+                {ilustracao && (
+                  <img
+                    src={ilustracao}
+                    alt={item.categoriaNome}
+                    className="w-12 h-12 shrink-0 rounded-lg object-cover border border-slate-200 bg-slate-50"
+                    loading="lazy"
+                  />
                 )}
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-sm font-black text-teal-700">{formatarMoeda(item.valor)}</p>
-                <button
-                  onClick={() => aoRemover(item.id)}
-                  className="text-xs font-semibold text-red-500 mt-1"
-                >
-                  remover
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800">
+                    {item.categoriaNome}
+                    {item.subOpcao ? ` — ${item.subOpcao}` : ''}
+                  </p>
+                  <p className="text-xs text-slate-500 leading-snug mt-0.5">{descricaoItem(item)}</p>
+                  {item.observacao && (
+                    <p className="text-xs text-slate-400 italic mt-0.5">“{item.observacao}”</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-black text-teal-700">{formatarMoeda(item.valor)}</p>
+                  <button
+                    onClick={() => aoRemover(item.id)}
+                    className="text-xs font-semibold text-red-500 mt-1"
+                  >
+                    remover
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 

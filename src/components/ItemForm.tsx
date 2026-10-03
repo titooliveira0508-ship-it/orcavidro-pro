@@ -75,11 +75,20 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       </button>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-3xl">
-            {categoria.icone}
-          </span>
-          <h2 className="text-lg font-black text-slate-900">{categoria.nome}</h2>
+        <div className="flex items-center gap-4">
+          <img
+            src={categoria.ilustracao}
+            alt={categoria.nome}
+            className="w-[120px] h-[120px] shrink-0 rounded-2xl object-cover border border-slate-200 bg-slate-50 shadow-sm"
+          />
+          <div className="min-w-0">
+            <h2 className="text-lg font-black text-slate-900 leading-tight">{categoria.nome}</h2>
+            {categoria.subOpcoes && (
+              <p className="text-xs text-slate-500 mt-1">
+                {categoria.subOpcoes.map((s) => s.rotulo).join(' · ')}
+              </p>
+            )}
+          </div>
         </div>
 
         {categoria.subOpcoes && (

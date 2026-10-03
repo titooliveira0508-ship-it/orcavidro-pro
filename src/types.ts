@@ -8,7 +8,8 @@ export interface SubOpcao {
 export interface Categoria {
   id: string;
   nome: string;
-  icone: string; // emoji usado como ilustração provisória
+  icone: string; // emoji legado (mantido por compatibilidade, não exibido)
+  ilustracao: string; // caminho da ilustração profissional, ex.: /ilustracoes/box-frontal.png
   subOpcoes?: SubOpcao[];
   temDobradiça?: boolean; // exibe cor/modelo de dobradiça (box de abrir)
   medidaLargura?: boolean;

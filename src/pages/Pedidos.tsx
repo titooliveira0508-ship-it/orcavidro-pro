@@ -40,11 +40,11 @@ export default function Pedidos() {
     setPedidos((prev) => prev.filter((p) => p.id !== id));
   }
 
-  function gerarPdf(p: Pedido) {
+  async function gerarPdf(p: Pedido) {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
-    gerarPdfOrcamento({
+    await gerarPdfOrcamento({
       empresa: storeEmpresa.ler(),
       numero: p.numero,
       clienteNome: p.clienteNome,
@@ -59,7 +59,7 @@ export default function Pedidos() {
     });
   }
 
-  function enviarWhats(p: Pedido) {
+  async function enviarWhats(p: Pedido) {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
@@ -68,7 +68,7 @@ export default function Pedidos() {
       alert('Este pedido não tem um cliente com telefone cadastrado.');
       return;
     }
-    gerarPdf(p);
+    await gerarPdf(p);
     window.open(linkWhatsApp(fone, mensagemOrcamento(p.clienteNome, p.numero, p.total)), '_blank');
   }
 

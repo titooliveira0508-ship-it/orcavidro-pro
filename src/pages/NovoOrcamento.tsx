@@ -90,19 +90,19 @@ export default function NovoOrcamento() {
     };
   }
 
-  function gerarPdfPrevia() {
+  async function gerarPdfPrevia() {
     if (itens.length === 0) return;
-    gerarPdfOrcamento(dadosPdfPrevia());
+    await gerarPdfOrcamento(dadosPdfPrevia());
   }
 
-  function enviarWhatsPrevia() {
+  async function enviarWhatsPrevia() {
     const cliente = clientes.find((c) => c.id === clienteId);
     const fone = cliente?.telefone ? soDigitos(cliente.telefone) : '';
     if (!fone) {
       alert('Selecione um cliente com telefone para enviar via WhatsApp.');
       return;
     }
-    gerarPdfOrcamento(dadosPdfPrevia());
+    await gerarPdfOrcamento(dadosPdfPrevia());
     const msg = mensagemOrcamento(cliente!.nome, undefined, total);
     window.open(linkWhatsApp(fone, msg), '_blank');
   }
@@ -110,8 +110,11 @@ export default function NovoOrcamento() {
   return (
     <div className="space-y-4">
       {pedidoFeito !== null && (
-        <div className="rounded-2xl bg-emerald-600 text-white px-4 py-3 text-sm font-bold shadow-md">
-          ✅ Pedido #{pedidoFeito} criado! Veja na aba Pedidos.
+        <div className="rounded-2xl bg-emerald-600 text-white px-4 py-3 text-sm font-bold shadow-md flex items-center gap-2.5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+          Pedido #{pedidoFeito} criado! Veja na aba Pedidos.
         </div>
       )}
 

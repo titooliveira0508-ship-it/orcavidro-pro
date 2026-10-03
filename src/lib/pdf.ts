@@ -1,6 +1,7 @@
 // ─── OrçaVidro Pro · Geração de PDF do orçamento (jspdf) ────────────────────
 import { jsPDF } from 'jspdf';
 import { ALTURAS, DadosEmpresa, ItemOrcamento } from '../types';
+import { getCategoria } from '../data/categorias';
 import { formatarMoeda } from './storage';
 
 export interface DadosPdf {
@@ -46,7 +47,50 @@ const COR_TEMA: [number, number, number] = [13, 115, 119]; // teal-700
 const CINZA: [number, number, number] = [100, 116, 139];
 const PRETO: [number, number, number] = [30, 41, 59];
 
-export function gerarPdfOrcamento(d: DadosPdf): void {
+export function gerarPdfOrcamento(d: DadosPdf): Promise<void> {
+  return gerarPdfOrcamentoAsync(d);
+}
+
+// ─── Ilustrações (carregadas como base64, com cache) ────────────────────────
+
+const cacheImagens = new Map<string, string | null>();
+
+function carregarImagem(caminho: string): Promise<string | null> {
+  if (cacheImagens.has(caminho)) return Promise.resolve(cacheImagens.get(caminho) ?? null);
+  return fetch(caminho)
+    .then((resp) => {
+      if (!resp.ok) throw new Error('falha ao carregar');
+      return resp.blob();
+    })
+    .then(
+      (blob) =>
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        })
+    )
+    .then((base64) => {
+      cacheImagens.set(caminho, base64);
+      return base64;
+    })
+    .catch(() => {
+      cacheImagens.set(caminho, null);
+      return null;
+    });
+}
+
+async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
+  // Pré-carrega as ilustrações dos itens (uma vez por categoria)
+  const ilustracoes = new Map<string, string | null>();
+  for (const item of d.itens) {
+    const cat = getCategoria(item.categoriaId);
+    if (cat && !ilustracoes.has(cat.ilustracao)) {
+      ilustracoes.set(cat.ilustracao, await carregarImagem(cat.ilustracao));
+    }
+  }
+
   const doc = new jsPDF();
   const margem = 14;
   const larguraUtil = 210 - margem * 2;
@@ -129,8 +173,13 @@ export function gerarPdfOrcamento(d: DadosPdf): void {
 
   d.itens.forEach((item, i) => {
     const detalhes = detalhesItem(item);
-    const linhasDetalhe = doc.splitTextToSize(detalhes, larguraUtil - 52);
-    const alturaBloco = 6 + linhasDetalhe.length * 4.5 + 4;
+    const cat = getCategoria(item.categoriaId);
+    const imgBase64 = cat ? ilustracoes.get(cat.ilustracao) ?? null : null;
+    const temImg = !!imgBase64;
+    const recuoTexto = temImg ? 30 : 0; // espaço da ilustração à esquerda
+    const linhasDetalhe = doc.splitTextToSize(detalhes, larguraUtil - 52 - recuoTexto);
+    const alturaTexto = 6 + linhasDetalhe.length * 4.5 + 4;
+    const alturaBloco = Math.max(alturaTexto, temImg ? 30 : 0);
     quebraPagina(alturaBloco);
 
     // Faixa do item
@@ -138,12 +187,22 @@ export function gerarPdfOrcamento(d: DadosPdf): void {
     doc.roundedRect(margem, y - 4, larguraUtil, alturaBloco, 2, 2, 'F');
 
     const yItem = y + 2;
+
+    // Ilustração do produto
+    if (temImg && imgBase64) {
+      try {
+        doc.addImage(imgBase64, 'PNG', margem + 3, y - 1, 24, 24);
+      } catch {
+        /* segue sem a ilustração */
+      }
+    }
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(...PRETO);
     const tituloItem = `${i + 1}. ${item.categoriaNome}${item.subOpcao ? ` — ${item.subOpcao}` : ''}`;
-    const tituloCortado = doc.splitTextToSize(tituloItem, larguraUtil - 52);
-    doc.text(tituloCortado.slice(0, 1), margem + 3, yItem);
+    const tituloCortado = doc.splitTextToSize(tituloItem, larguraUtil - 52 - recuoTexto);
+    doc.text(tituloCortado.slice(0, 1), margem + 3 + recuoTexto, yItem);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
@@ -153,7 +212,7 @@ export function gerarPdfOrcamento(d: DadosPdf): void {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(...CINZA);
-    doc.text(linhasDetalhe, margem + 3, yItem + 5);
+    doc.text(linhasDetalhe, margem + 3 + recuoTexto, yItem + 5);
 
     y += alturaBloco + 2;
   });

@@ -11,9 +11,12 @@ export default function CategoriaCard({ categoria, aoClicar }: Props) {
       onClick={aoClicar}
       className="flex items-center gap-3 w-full bg-white rounded-2xl border border-slate-200 p-3.5 text-left shadow-sm active:scale-[0.99] active:border-teal-400 transition-all"
     >
-      <span className="w-11 h-11 shrink-0 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-2xl">
-        {categoria.icone}
-      </span>
+      <img
+        src={categoria.ilustracao}
+        alt={categoria.nome}
+        className="w-14 h-14 shrink-0 rounded-xl object-cover border border-slate-200 bg-slate-50"
+        loading="lazy"
+      />
       <span className="flex-1">
         <span className="block text-sm font-bold text-slate-800">{categoria.nome}</span>
         {categoria.subOpcoes && (
