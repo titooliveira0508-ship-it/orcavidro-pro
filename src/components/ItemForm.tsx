@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
-  ALTURAS,
+  alturasParaCategoria,
   AlturaOpcao,
   Categoria,
+  CATEGORIAS_PORTA,
   CORES_KIT,
   CORES_VIDRO,
   ItemOrcamento,
@@ -28,7 +29,10 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   const [subOpcao, setSubOpcao] = useState(categoria.subOpcoes?.[0]?.id ?? '');
   const [largura, setLargura] = useState('');
   const [altura, setAltura] = useState('');
-  const [alturaOpcao, setAlturaOpcao] = useState<AlturaOpcao>('1900');
+  const [alturaOpcao, setAlturaOpcao] = useState<AlturaOpcao>(
+    CATEGORIAS_PORTA.includes(categoria.id) ? '2100' : '1900'
+  );
+  const opcoesAltura = alturasParaCategoria(categoria.id);
   const [corVidro, setCorVidro] = useState<string>(CORES_VIDRO[0]);
   const [corKit, setCorKit] = useState<string>(CORES_KIT[0]);
   const [corDobradica, setCorDobradica] = useState<string>(CORES_KIT[0]);
@@ -154,7 +158,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
         <div>
           <label className={rotulo}>Altura padrão</label>
           <div className="flex gap-2 flex-wrap">
-            {ALTURAS.map((a) => (
+            {opcoesAltura.map((a) => (
               <button
                 key={a.valor}
                 onClick={() => setAlturaOpcao(a.valor)}

@@ -16,7 +16,10 @@ export interface Categoria {
   medidaAltura?: boolean;
 }
 
-export type AlturaOpcao = '1800' | '1900' | 'piso-teto';
+export type AlturaOpcao = '1800' | '1900' | '2100' | 'piso-teto';
+
+export const CATEGORIAS_BOX = ['box-frontal', 'box-abrir', 'box-canto'];
+export const CATEGORIAS_PORTA = ['porta-correr', 'porta-pivotante'];
 
 export interface ItemOrcamento {
   id: string;
@@ -72,9 +75,6 @@ export const CORES_VIDRO = [
   'Incolor',
   'Fumê',
   'Verde',
-  'Bronze',
-  'Azul',
-  'Espelhado',
 ] as const;
 
 export const CORES_KIT = [
@@ -100,3 +100,17 @@ export const ALTURAS: { valor: AlturaOpcao; rotulo: string }[] = [
   { valor: '1900', rotulo: '1900 mm' },
   { valor: 'piso-teto', rotulo: 'Piso-teto' },
 ];
+
+/** Alturas disponíveis por categoria: só box tem piso-teto; portas usam 2100 padrão. */
+export function alturasParaCategoria(categoriaId: string): { valor: AlturaOpcao; rotulo: string }[] {
+  if (CATEGORIAS_PORTA.includes(categoriaId)) {
+    return [{ valor: '2100', rotulo: '2100 (padrão)' }];
+  }
+  if (CATEGORIAS_BOX.includes(categoriaId)) {
+    return ALTURAS;
+  }
+  return [
+    { valor: '1800', rotulo: '1800 mm' },
+    { valor: '1900', rotulo: '1900 mm' },
+  ];
+}

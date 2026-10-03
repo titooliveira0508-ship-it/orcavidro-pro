@@ -15,13 +15,14 @@ export interface OpcoesDiagrama {
   titulo?: string;
 }
 
-const BG = '#0A1628';
-const BG_PAINEL = '#0E2145';
-const VIDRO = '#3A6EA5';
-const CIANO = '#4DD0E1';
-const CIANO_FORTE = '#0FA0F2';
-const BRANCO = '#F4F9FF';
-const LINHA_SUAVE = '#27436F';
+const BG = '#FFFFFF';
+const BG_PAINEL = '#F0F4F8';
+const VIDRO = '#D6E8F5';
+const CIANO = '#2E7CB8';
+const CIANO_FORTE = '#1A5A8A';
+const BRANCO = '#FFFFFF';
+const LINHA_SUAVE = '#B0C4D8';
+const TEXTO = '#1A3A5A';
 
 const SVG_W = 320;
 const SVG_H = 400;
@@ -143,7 +144,7 @@ function emblema(cx: number, y: number, texto: string): string {
     `<rect x="${f(cxc - w / 2)}" y="${f(y - 12)}" width="${f(w)}" height="24" rx="12"` +
     ` fill="${BG}" stroke="${CIANO}" stroke-width="1.4"/>` +
     `<text x="${f(cxc)}" y="${f(y + 4.5)}" text-anchor="middle" font-size="13" font-weight="700"` +
-    ` font-family="${FONTE}" fill="${BRANCO}">${esc(texto)}</text>`
+    ` font-family="${FONTE}" fill="${TEXTO}">${esc(texto)}</text>`
   );
 }
 
@@ -217,21 +218,18 @@ function corpo(
       return s;
     }
     case 'box-canto': {
-      const bw = w * 0.55;
-      const bh = h * 0.42;
-      const pts =
-        `${f(x)},${f(y)} ${f(x + bw)},${f(y)} ${f(x + bw)},${f(y + h - bh)}` +
-        ` ${f(x + w)},${f(y + h - bh)} ${f(x + w)},${f(y + h)} ${f(x)},${f(y + h)}`;
-      let s =
-        `<polygon points="${pts}" fill="${BG_PAINEL}" stroke="${CIANO}" stroke-width="2.4"/>`;
-      // ala esquerda: 2 painéis
-      s += painel(x + 6, y + 6, bw / 2 - 9, h - bh - 12);
-      s += painel(x + bw / 2 + 3, y + 6, bw / 2 - 9, h - bh - 12);
-      // ala inferior: 2 painéis
-      s += painel(x + bw + 6, y + h - bh + 6, (w - bw) / 2 - 9, bh - 12);
-      s += painel(x + bw + (w - bw) / 2 + 3, y + h - bh + 6, (w - bw) / 2 - 9, bh - 12);
+      // vista frontal do box de canto: duas paredes de vidro em L
+      let s = moldura(x, y, w, h);
+      const cantoX = x + w * 0.55;
+      // parede esquerda (frontal)
+      s += painel(x + 8, y + 10, cantoX - x - 14, h - 24);
+      // parede direita (lateral, em perspectiva simples)
+      const dirW = w - (cantoX - x) - 8;
+      s += `<polygon points="${f(cantoX)},${f(y + 10)} ${f(x + w - 8)},${f(y + 22)} ${f(x + w - 8)},${f(y + h - 14)} ${f(cantoX)},${f(y + h - 14)}" fill="${BG_PAINEL}" stroke="${CIANO}" stroke-width="1.6"/>`;
       // poste do canto
-      s += `<rect x="${f(x + bw - 3)}" y="${f(y + h - bh - 3)}" width="6" height="6" fill="${CIANO}"/>`;
+      s += `<rect x="${f(cantoX - 3)}" y="${f(y + 8)}" width="6" height="${f(h - 20)}" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      // roldanas/trilho superior
+      s += trilho(x + 8, y + 5, cantoX - x - 14);
       return s;
     }
     case 'janelas': {
@@ -275,14 +273,16 @@ function corpo(
     case 'porta-pivotante': {
       let s = moldura(x, y, w, h);
       s += painel(x + 6, y + 6, w - 12, h - 12);
+      // pivô a 7cm da borda (no canto, não no centro)
+      const pxPivo = x + 6 + (w - 12) * 0.08;
       s +=
-        `<line x1="${f(x + w / 2)}" y1="${f(y + 4)}" x2="${f(x + w / 2)}" y2="${f(y + h - 4)}"` +
+        `<line x1="${f(pxPivo)}" y1="${f(y + 4)}" x2="${f(pxPivo)}" y2="${f(y + h - 4)}"` +
         ` stroke="${CIANO}" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.85"/>`;
-      s += pivo(x + w / 2, y + 10);
-      s += pivo(x + w / 2, y + h - 10);
-      // fechadura/maçaneta na lateral (como na referência)
-      s += `<rect x="${f(x + 8)}" y="${f(y + h / 2 - 8)}" width="14" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
-      s += `<rect x="${f(x + 4)}" y="${f(y + h / 2 - 3)}" width="8" height="6" rx="1.5" fill="${CIANO}"/>`;
+      s += pivo(pxPivo, y + 10);
+      s += pivo(pxPivo, y + h - 10);
+      // fechadura/maçaneta na lateral oposta ao pivô
+      s += `<rect x="${f(x + w - 22)}" y="${f(y + h / 2 - 8)}" width="14" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      s += `<rect x="${f(x + w - 12)}" y="${f(y + h / 2 - 3)}" width="8" height="6" rx="1.5" fill="${CIANO}"/>`;
       return s;
     }
     case 'espelho': {

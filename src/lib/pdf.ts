@@ -25,6 +25,7 @@ export interface DadosPdf {
 function rotuloAltura(item: ItemOrcamento): string {
   if (item.alturaOpcao === 'piso-teto') return 'Piso-teto';
   if (item.alturaMm) return `${item.alturaMm} mm`;
+  if (item.alturaOpcao === '2100') return '2100 mm (padrão)';
   return ALTURAS.find((a) => a.valor === item.alturaOpcao)?.rotulo ?? item.alturaOpcao;
 }
 
