@@ -252,9 +252,16 @@ function corpo(
         s += painel(px, y + 16, pw, h - 28);
         s += roldana(px + pw / 2, y + 8.5);
       }
-      // puxador vertical na última folha
-      const pxUlt = x + 6 + (n - 1) * (pw + gap);
-      s += puxador(pxUlt + pw - 10, y + h / 2 - 18, 36);
+      // puxador(es): 2 folhas = na última; 4 folhas = nas 2 centrais (onde se encontram)
+      if (n >= 4) {
+        const px2 = x + 6 + 1 * (pw + gap);
+        const px3 = x + 6 + 2 * (pw + gap);
+        s += puxador(px2 + pw - 10, y + h / 2 - 18, 36);
+        s += puxador(px3 + 4, y + h / 2 - 18, 36);
+      } else {
+        const pxUlt = x + 6 + (n - 1) * (pw + gap);
+        s += puxador(pxUlt + pw - 10, y + h / 2 - 18, 36);
+      }
       return s;
     }
     case 'porta-pivotante': {
