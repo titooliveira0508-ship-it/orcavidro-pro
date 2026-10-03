@@ -339,6 +339,24 @@ function corpo(
       }
       return s;
     }
+    case 'box-flex': {
+      // box flex/articulado: painéis dobráveis com dobradiças centrais
+      let s = moldura(x, y, w, h);
+      const pw = (w - 12) / 2;
+      // painel esquerdo (fixo)
+      s += painel(x + 6, y + 10, pw - 4, h - 22);
+      // painel direito (articulado, com dobra)
+      const px2 = x + 6 + pw + 2;
+      s += painel(px2, y + 10, pw - 4, h - 22);
+      // dobradiças da articulação
+      s += `<circle cx="${f(px2 + 4)}" cy="${f(y + h * 0.3)}" r="5" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="1"/>`;
+      s += `<circle cx="${f(px2 + 4)}" cy="${f(y + h * 0.7)}" r="5" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="1"/>`;
+      // puxador no painel articulado
+      s += `<circle cx="${f(px2 + pw - 12)}" cy="${f(y + h / 2)}" r="5" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="1"/>`;
+      // trilho superior
+      s += trilho(x + 6, y + 5, w - 12);
+      return s;
+    }
     case 'bascula': {
       // janela basculante: painel único com ferragens laterais e corrente
       let s = moldura(x, y, w, h);

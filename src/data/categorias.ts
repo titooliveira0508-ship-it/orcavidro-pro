@@ -87,6 +87,12 @@ export const CATEGORIAS: Categoria[] = [
     icone: '🪟',
     ilustracao: '/ilustracoes/bascula.png',
   },
+  {
+    id: 'box-flex',
+    nome: 'Box Flex (Articulado)',
+    icone: '🚿',
+    ilustracao: '/ilustracoes/box-flex.png',
+  },
 ];
 
 export function getCategoria(id: string): Categoria | undefined {

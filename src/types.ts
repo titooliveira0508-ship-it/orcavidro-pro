@@ -18,7 +18,7 @@ export interface Categoria {
 
 export type AlturaOpcao = '1800' | '1900' | '2100' | 'piso-teto';
 
-export const CATEGORIAS_BOX = ['box-frontal', 'box-abrir', 'box-canto'];
+export const CATEGORIAS_BOX = ['box-frontal', 'box-abrir', 'box-canto', 'box-flex'];
 export const CATEGORIAS_PORTA = ['porta-correr', 'porta-pivotante'];
 
 export interface ItemOrcamento {
