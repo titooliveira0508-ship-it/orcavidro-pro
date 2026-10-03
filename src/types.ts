@@ -117,7 +117,7 @@ export function alturasParaCategoria(categoriaId: string): { valor: AlturaOpcao;
   if (CATEGORIAS_BOX.includes(categoriaId)) {
     return ALTURAS;
   }
-  if (['bascula', 'armario-pia', 'guarda-corpo'].includes(categoriaId)) {
+  if (['bascula', 'armario-pia', 'guarda-corpo', 'espelho'].includes(categoriaId)) {
     return []; // engenharia: só medida personalizada
   }
   return [
