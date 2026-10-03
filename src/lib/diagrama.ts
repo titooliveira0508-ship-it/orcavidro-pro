@@ -272,7 +272,9 @@ function corpo(
         ` stroke="${CIANO}" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.85"/>`;
       s += pivo(x + w / 2, y + 10);
       s += pivo(x + w / 2, y + h - 10);
-      s += puxador(x + 14, y + h / 2 - 18, 36);
+      // fechadura/maçaneta na lateral (como na referência)
+      s += `<rect x="${f(x + 8)}" y="${f(y + h / 2 - 8)}" width="14" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      s += `<rect x="${f(x + 4)}" y="${f(y + h / 2 - 3)}" width="8" height="6" rx="1.5" fill="${CIANO}"/>`;
       return s;
     }
     case 'espelho': {
