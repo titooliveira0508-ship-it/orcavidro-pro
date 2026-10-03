@@ -3,7 +3,7 @@
 // subtotal / desconto / total em destaque. Paleta da logo oficial.
 import { jsPDF } from 'jspdf';
 import { ALTURAS, DadosEmpresa, ItemOrcamento } from '../types';
-import { getCategoria } from '../data/categorias';
+import { gerarSvgDiagrama, rasterizarSvg } from './diagrama';
 import { formatarMoeda, quantidadeDe, totalItem } from './storage';
 
 export interface DadosPdf {
@@ -56,6 +56,16 @@ const AZUL_CLARO: [number, number, number] = [226, 243, 254];
 const PRETO: [number, number, number] = [30, 41, 59];
 const BRANCO: [number, number, number] = [255, 255, 255];
 
+function chaveDiagrama(item: ItemOrcamento): string {
+  return [
+    item.categoriaId,
+    item.larguraMm ?? '',
+    item.alturaMm ?? '',
+    item.alturaOpcao,
+    item.subOpcao ?? '',
+  ].join('|');
+}
+
 export function gerarPdfOrcamento(d: DadosPdf): Promise<void> {
   return gerarPdfOrcamentoAsync(d);
 }
@@ -101,13 +111,20 @@ const COL_TOTAL_X = 210 - MARGEM; // total do item (direita)
 const ALT_LINHA_CAB = 9;
 
 async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
-  // Pré-carrega logo + ilustrações dos itens
+  // Pré-carrega logo + diagramas técnicos dos itens
   const logoBase64 = await carregarImagem('/logo.png').catch(() => null);
-  const ilustracoes = new Map<string, string | null>();
+  const diagramas = new Map<string, string | null>();
   for (const item of d.itens) {
-    const cat = getCategoria(item.categoriaId);
-    if (cat && !ilustracoes.has(cat.ilustracao)) {
-      ilustracoes.set(cat.ilustracao, await carregarImagem(cat.ilustracao));
+    const chave = chaveDiagrama(item);
+    if (!diagramas.has(chave)) {
+      const svg = gerarSvgDiagrama({
+        categoriaId: item.categoriaId,
+        larguraMm: item.larguraMm,
+        alturaMm: item.alturaMm,
+        alturaOpcao: item.alturaOpcao,
+        subOpcao: item.subOpcao,
+      });
+      diagramas.set(chave, await rasterizarSvg(svg, 440));
     }
   }
 
@@ -228,16 +245,15 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
 
   d.itens.forEach((item, i) => {
     const qtd = quantidadeDe(item);
-    const cat = getCategoria(item.categoriaId);
-    const imgBase64 = cat ? ilustracoes.get(cat.ilustracao) ?? null : null;
+    const imgBase64 = diagramas.get(chaveDiagrama(item)) ?? null;
     const temImg = !!imgBase64;
 
     const tituloItem = `${item.categoriaNome}${item.subOpcao ? ` — ${item.subOpcao}` : ''}`;
     const detalhes = detalhesItem(item);
-    const largTexto = COL_QTD_X - COL_DESC_X - (temImg ? 24 : 6);
+    const largTexto = COL_QTD_X - COL_DESC_X - (temImg ? 22 : 6);
     const lTitulo = doc.splitTextToSize(tituloItem, largTexto);
     const lDetalhes = doc.splitTextToSize(detalhes, largTexto);
-    const alturaLinha = Math.max(20, 5 + lTitulo.slice(0, 2).length * 4.5 + lDetalhes.slice(0, 4).length * 3.8 + 3);
+    const alturaLinha = Math.max(24, 5 + lTitulo.slice(0, 2).length * 4.5 + lDetalhes.slice(0, 4).length * 3.8 + 3);
 
     // Se não couber, nova página + repete cabeçalho
     if (y + alturaLinha > 278) {
@@ -251,12 +267,12 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
       doc.rect(MARGEM, y, LARG_UTIL, alturaLinha, 'F');
     }
 
-    const xTxt = COL_DESC_X + (temImg ? 23 : 3);
+    const xTxt = COL_DESC_X + (temImg ? 22 : 3);
     const yTxt = y + 5.5;
 
     if (temImg && imgBase64) {
       try {
-        doc.addImage(imgBase64, 'PNG', COL_DESC_X + 3, y + 2, 17, 17);
+        doc.addImage(imgBase64, 'PNG', COL_DESC_X + 3, y + 2, 16, 20);
       } catch {
         /* segue sem imagem */
       }

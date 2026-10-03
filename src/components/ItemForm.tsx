@@ -10,6 +10,7 @@ import {
   PELICULAS,
 } from '../types';
 import { novoId } from '../lib/storage';
+import DiagramaTecnico from './DiagramaTecnico';
 
 interface Props {
   categoria: Categoria;
@@ -39,6 +40,11 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   const [erro, setErro] = useState('');
 
   const subOpcaoRotulo = categoria.subOpcoes?.find((s) => s.id === subOpcao)?.rotulo;
+
+  const numOuIndef = (t: string): number | undefined => {
+    const n = parseNumero(t);
+    return n > 0 ? n : undefined;
+  };
 
   function adicionar() {
     const valor = parseNumero(valorTexto);
@@ -78,20 +84,26 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       </button>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
-        <div className="flex items-center gap-4">
-          <img
-            src={categoria.ilustracao}
-            alt={categoria.nome}
-            className="w-[120px] h-[120px] shrink-0 rounded-2xl object-cover border border-slate-200 bg-slate-50 shadow-sm"
+        <div>
+          <h2 className="text-lg font-black text-slate-900 leading-tight">{categoria.nome}</h2>
+          {categoria.subOpcoes && (
+            <p className="text-xs text-slate-500 mt-1">
+              {categoria.subOpcoes.map((s) => s.rotulo).join(' · ')}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <DiagramaTecnico
+            categoriaId={categoria.id}
+            larguraMm={numOuIndef(largura)}
+            alturaMm={alturaOpcao === 'piso-teto' ? undefined : numOuIndef(altura)}
+            alturaOpcao={alturaOpcao}
+            subOpcao={subOpcao}
           />
-          <div className="min-w-0">
-            <h2 className="text-lg font-black text-slate-900 leading-tight">{categoria.nome}</h2>
-            {categoria.subOpcoes && (
-              <p className="text-xs text-slate-500 mt-1">
-                {categoria.subOpcoes.map((s) => s.rotulo).join(' · ')}
-              </p>
-            )}
-          </div>
+          <p className="text-[11px] text-slate-400 text-center mt-1">
+            Desenho técnico — atualiza com as medidas digitadas
+          </p>
         </div>
 
         {categoria.subOpcoes && (
