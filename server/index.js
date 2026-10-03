@@ -138,7 +138,7 @@ function textoConfirmacao(nome, endereco, servico) {
     `👤 Nome: ${nome}\n` +
     `📍 Endereço: ${endereco}\n` +
     `🔧 Serviço: ${servico}\n\n` +
-    'O Tito vai entrar em contato com você em breve com o orçamento. Obrigado pelo contato! 🙏'
+    'A *M. Oliveira Envidraçamentos* vai entrar em contato com você em breve com o orçamento. Obrigado pelo contato! 🙏'
   );
 }
 
