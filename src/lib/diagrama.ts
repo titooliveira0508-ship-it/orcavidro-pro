@@ -272,7 +272,7 @@ function corpo(
         ` stroke="${CIANO}" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.85"/>`;
       s += pivo(x + w / 2, y + 10);
       s += pivo(x + w / 2, y + h - 10);
-      s += puxador(x + w / 2 + 10, y + h / 2 - 12);
+      s += puxador(x + 14, y + h / 2 - 18, 36);
       return s;
     }
     case 'espelho': {
