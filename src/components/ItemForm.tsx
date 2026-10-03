@@ -164,7 +164,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
               <label className={rotulo}>Altura (mm)</label>
               <input
                 inputMode="numeric"
-                placeholder="Ex.: 1900"
+                placeholder={categoria.id === 'guarda-corpo' ? 'Ex.: 1100' : 'Ex.: 1900'}
                 value={altura}
                 onChange={(e) => setAltura(e.target.value)}
                 disabled={alturaOpcao === 'piso-teto'}

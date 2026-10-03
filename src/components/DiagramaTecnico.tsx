@@ -30,7 +30,7 @@ export default function DiagramaTecnico({
   return (
     <div
       className={
-        className ?? 'w-full overflow-hidden rounded-2xl border border-[#16294d] bg-[#0A1628]'
+        className ?? 'w-full overflow-hidden rounded-2xl border border-slate-200 bg-white'
       }
       dangerouslySetInnerHTML={{ __html: svg }}
     />
