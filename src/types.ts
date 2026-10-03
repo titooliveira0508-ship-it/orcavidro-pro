@@ -79,12 +79,11 @@ export const CORES_VIDRO = [
 ] as const;
 
 export const CORES_KIT = [
-  'Cromado',
-  'Preto',
   'Branco',
+  'Preto',
+  'Natural fosco',
+  'Cromado',
   'Dourado',
-  'Rose Gold',
-  'Inox Escovado',
 ] as const;
 
 export const MODELOS_DOBRADICA = [
