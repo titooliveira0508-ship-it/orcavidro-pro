@@ -285,9 +285,16 @@ function corpo(
         ` stroke="${CIANO}" stroke-width="1.4" stroke-dasharray="6 4" opacity="0.85"/>`;
       s += pivo(pxPivo, y + 10);
       s += pivo(pxPivo, y + h - 10);
-      // fechadura/maçaneta na lateral oposta ao pivô
-      s += `<rect x="${f(x + w - 22)}" y="${f(y + h / 2 - 8)}" width="14" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
-      s += `<rect x="${f(x + w - 12)}" y="${f(y + h / 2 - 3)}" width="8" height="6" rx="1.5" fill="${CIANO}"/>`;
+      const ehMacaneta = (subOpcao || '').toLowerCase().includes('macaneta');
+      if (ehMacaneta) {
+        // maçaneta redonda com fechadura
+        s += `<circle cx="${f(x + w - 18)}" cy="${f(y + h / 2)}" r="7" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="1.2"/>`;
+        s += `<rect x="${f(x + w - 26)}" y="${f(y + h / 2 - 10)}" width="10" height="20" rx="2" fill="${CIANO}" opacity="0.7"/>`;
+      } else {
+        // puxador vertical + fechadura
+        s += puxador(x + w - 22, y + h / 2 - 20, 40);
+        s += `<rect x="${f(x + w - 26)}" y="${f(y + h / 2 - 8)}" width="12" height="16" rx="2" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="0.8"/>`;
+      }
       return s;
     }
     case 'espelho': {

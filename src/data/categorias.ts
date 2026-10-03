@@ -52,6 +52,10 @@ export const CATEGORIAS: Categoria[] = [
     nome: 'Porta Pivotante',
     icone: '🔄',
     ilustracao: '/ilustracoes/porta-pivotante.png',
+    subOpcoes: [
+      { id: 'puxador', rotulo: 'Com puxador' },
+      { id: 'macaneta', rotulo: 'Com maçaneta' },
+    ],
   },
   {
     id: 'espelho',
