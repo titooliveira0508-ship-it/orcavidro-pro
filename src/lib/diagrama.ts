@@ -192,6 +192,13 @@ function corpo(
         s += painel(px, y + 16, pw, h - 28);
         s += roldana(px + pw / 2, y + 8.5);
       }
+      if (n >= 4) {
+        // box 4 folhas: puxadores nas folhas centrais móveis
+        const px2 = x + 6 + 1 * (pw + gap);
+        const px3 = x + 6 + 2 * (pw + gap);
+        s += `<circle cx="${f(px2 + pw - 8)}" cy="${f(y + h / 2)}" r="4" fill="${BRANCO}"/>`;
+        s += `<circle cx="${f(px3 + 8)}" cy="${f(y + h / 2)}" r="4" fill="${BRANCO}"/>`;
+      }
       return s;
     }
     case 'box-abrir': {

@@ -11,6 +11,7 @@ export const CATEGORIAS: Categoria[] = [
     subOpcoes: [
       { id: '2-folhas', rotulo: '2 folhas' },
       { id: '3-folhas', rotulo: '3 folhas' },
+      { id: '4-folhas', rotulo: '4 folhas' },
     ],
   },
   {
