@@ -386,9 +386,11 @@ export function gerarSvgDiagrama(
   dim?: { width: string; height: string }
 ): string {
   const padraoBascula = o.categoriaId === 'bascula';
+  const ehPorta = o.categoriaId === 'porta-correr' || o.categoriaId === 'porta-pivotante';
   const largura = o.larguraMm && o.larguraMm > 0 ? o.larguraMm : padraoBascula ? 600 : 1200;
   const pisoTeto = o.alturaOpcao === 'piso-teto';
-  const altura = pisoTeto ? 2600 : o.alturaMm && o.alturaMm > 0 ? o.alturaMm : padraoBascula ? 600 : 1900;
+  const alturaPadrao = padraoBascula ? 600 : ehPorta ? 2100 : 1900;
+  const altura = pisoTeto ? 2600 : o.alturaMm && o.alturaMm > 0 ? o.alturaMm : alturaPadrao;
   const rotL = inteiro(largura);
   const rotA = pisoTeto ? 'PISO-TETO' : inteiro(altura);
 

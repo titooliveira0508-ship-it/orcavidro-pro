@@ -4,12 +4,15 @@ import {
   AlturaOpcao,
   Categoria,
   CATEGORIAS_PORTA,
+  CORES_ESPELHO,
   CORES_KIT,
   coresKitParaCategoria,
   CORES_VIDRO,
   ItemOrcamento,
   MODELOS_DOBRADICA,
   PELICULAS,
+  precoM2Espelho,
+  TIPOS_BORDA_ESPELHO,
 } from '../types';
 import { novoId } from '../lib/storage';
 import DiagramaTecnico from './DiagramaTecnico';
@@ -36,7 +39,10 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   );
   const opcoesAltura = alturasParaCategoria(categoria.id);
   const opcoesKit = coresKitParaCategoria(categoria.id);
-  const [corVidro, setCorVidro] = useState<string>(CORES_VIDRO[0]);
+  const ehEspelho = categoria.id === 'espelho';
+  const opcoesCorVidro = ehEspelho ? CORES_ESPELHO : CORES_VIDRO;
+  const [tipoBorda, setTipoBorda] = useState<string>(TIPOS_BORDA_ESPELHO[0].rotulo);
+  const [corVidro, setCorVidro] = useState<string>(opcoesCorVidro[0]);
   const [corKit, setCorKit] = useState<string>(CORES_KIT[0]);
   const [corDobradica, setCorDobradica] = useState<string>(CORES_KIT[0]);
   const [modeloDobradica, setModeloDobradica] = useState<string>(MODELOS_DOBRADICA[0]);
@@ -74,6 +80,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       corDobradica: categoria.temDobradiça ? corDobradica : undefined,
       modeloDobradica: categoria.temDobradiça ? modeloDobradica : undefined,
       pelicula: pelicula || undefined,
+      tipoBorda: ehEspelho ? tipoBorda : undefined,
       valor,
       quantidade,
       observacao: observacao.trim() || undefined,
@@ -210,9 +217,9 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={rotulo}>Cor do vidro</label>
+            <label className={rotulo}>{ehEspelho ? 'Cor do espelho' : 'Cor do vidro'}</label>
             <select value={corVidro} onChange={(e) => setCorVidro(e.target.value)} className={campo}>
-              {CORES_VIDRO.map((c) => (
+              {opcoesCorVidro.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -230,6 +237,62 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
             </select>
           </div>
         </div>
+
+        {ehEspelho && (
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-3">
+            <div>
+              <label className={rotulo}>Tipo de borda</label>
+              <div className="flex gap-2 flex-wrap">
+                {TIPOS_BORDA_ESPELHO.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTipoBorda(t.rotulo)}
+                    className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                      tipoBorda === t.rotulo
+                        ? 'bg-brand border-brand text-white'
+                        : 'bg-white border-slate-300 text-slate-600'
+                    }`}
+                  >
+                    {t.rotulo}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const l = parseNumero(largura);
+              const a = parseNumero(altura);
+              if (l > 0 && a > 0) {
+                const m2 = (l * a) / 1000000;
+                const preco = precoM2Espelho(corVidro, tipoBorda);
+                const total = m2 * preco;
+                return (
+                  <div className="text-sm text-slate-700">
+                    <span className="font-semibold">{m2.toFixed(2)} m²</span>
+                    {' × '}
+                    <span className="font-semibold">
+                      R$ {preco.toFixed(2).replace('.', ',')}
+                    </span>
+                    {' = '}
+                    <span className="font-black text-brand-dark">
+                      R$ {total.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setValorTexto(
+                          total.toFixed(2).replace('.', ',')
+                        )
+                      }
+                      className="ml-2 px-2.5 py-1 rounded-full bg-brand text-white text-xs font-bold"
+                    >
+                      Usar valor
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        )}
 
         {categoria.temDobradiça && (
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-amber-50 border border-amber-200 p-3">

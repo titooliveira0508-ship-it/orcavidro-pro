@@ -48,6 +48,7 @@ function detalhesItem(item: ItemOrcamento): string {
     );
   }
   if (item.pelicula) partes.push(`Película ${item.pelicula}`);
+  if (item.tipoBorda) partes.push(`Borda ${item.tipoBorda}`);
   if (item.observacao) partes.push(`Obs.: ${item.observacao}`);
   return partes.join(' · ');
 }

@@ -35,6 +35,7 @@ export interface ItemOrcamento {
   corDobradica?: string;
   modeloDobradica?: string;
   pelicula?: string; // ex.: "Privativa", "Segurança" ou ""
+  tipoBorda?: string; // espelho: "Lapidado" ou "Bisotado"
   valor: number; // valor unitário em R$ digitado pelo usuário
   quantidade: number; // quantidade do item (padrão 1)
   observacao?: string;
@@ -77,6 +78,23 @@ export const CORES_VIDRO = [
   'Fumê',
   'Verde',
 ] as const;
+
+export const CORES_ESPELHO = [
+  'Prata',
+  'Bronze',
+  'Fumê',
+] as const;
+
+export const TIPOS_BORDA_ESPELHO = [
+  { id: 'lapidado', rotulo: 'Lapidado' },
+  { id: 'bisotado', rotulo: 'Bisotado' },
+] as const;
+
+/** Preço do m² do espelho: prata lapidado 450, prata bisotado 650, bronze/fumê 950. */
+export function precoM2Espelho(cor: string, tipoBorda: string): number {
+  if (cor === 'Bronze' || cor === 'Fumê') return 950;
+  return tipoBorda === 'Bisotado' ? 650 : 450;
+}
 
 export const CORES_KIT = [
   'Branco',
