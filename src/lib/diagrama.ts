@@ -208,7 +208,8 @@ function corpo(
       s += painel(x + w - dp - 2, y + 6, dp - 4, h - 12); // porta
       s += dobradica(x + w - 3, y + h * 0.25);
       s += dobradica(x + w - 3, y + h * 0.75);
-      s += puxador(x + w - dp + 6, y + h / 2 - 12);
+      // maçaneta redonda no centro (como na referência)
+      s += `<circle cx="${f(x + w - dp + 10)}" cy="${f(y + h / 2)}" r="5" fill="${CIANO_FORTE}" stroke="${BRANCO}" stroke-width="1"/>`;
       s +=
         `<path d="M ${f(x + w - dp)} ${f(y + 6)}` +
         ` A ${f(dp)} ${f(dp)} 0 0 0 ${f(x + w - dp + dp * 0.72)} ${f(y + 6 + dp * 0.7)}"` +
