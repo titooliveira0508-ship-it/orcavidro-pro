@@ -304,11 +304,16 @@ function corpo(
       return s;
     }
     case 'armario-pia': {
+      // kit pia: 2 folhas de correr, puxadores voltados pra parede (bordas externas)
       let s = moldura(x, y, w, h);
-      s += painel(x + 6, y + 6, w / 2 - 9, h - 12);
-      s += painel(x + w / 2 + 3, y + 6, w / 2 - 9, h - 12);
-      s += puxador(x + w / 2 - 11, y + h / 2 - 12);
-      s += puxador(x + w / 2 + 6, y + h / 2 - 12);
+      s += trilho(x + 4, y + 5, w - 8);
+      s += painel(x + 6, y + 16, w / 2 - 9, h - 28);
+      s += painel(x + w / 2 + 3, y + 16, w / 2 - 9, h - 28);
+      s += roldana(x + w / 4, y + 8.5);
+      s += roldana(x + (3 * w) / 4, y + 8.5);
+      // puxadores nas bordas externas (lado da parede)
+      s += puxador(x + 10, y + h / 2 - 18, 36);
+      s += puxador(x + w - 15, y + h / 2 - 18, 36);
       return s;
     }
     case 'guarda-corpo': {

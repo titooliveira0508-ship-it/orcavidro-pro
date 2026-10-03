@@ -110,8 +110,8 @@ export function alturasParaCategoria(categoriaId: string): { valor: AlturaOpcao;
   if (CATEGORIAS_BOX.includes(categoriaId)) {
     return ALTURAS;
   }
-  if (categoriaId === 'bascula') {
-    return []; // báscula: só medida personalizada (engenharia)
+  if (categoriaId === 'bascula' || categoriaId === 'armario-pia') {
+    return []; // engenharia: só medida personalizada
   }
   return [
     { valor: '1800', rotulo: '1800 mm' },
