@@ -391,9 +391,9 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
   doc.setTextColor(...CINZA);
   doc.text('Orçamento gerado pelo OrçaVidro Pro.', MARGEM, y);
 
-  // ── Download ──────────────────────────────────────────────────────────
-  const nomeArquivo = d.numero ? `orcamento-${d.numero}.pdf` : `orcamento-${Date.now()}.pdf`;
-  doc.save(nomeArquivo);
+  // ── Abrir em nova aba para conferência (em vez de baixar direto) ──────
+  const url = doc.output('bloburl');
+  window.open(url, '_blank');
 }
 
 // ─── WhatsApp ────────────────────────────────────────────────────────────────
