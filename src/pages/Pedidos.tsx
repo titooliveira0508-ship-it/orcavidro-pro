@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pedido, StatusPedido } from '../types';
+import Financeiro from '../components/Financeiro';
 import {
   descontoDe,
   formatarMoeda,
@@ -35,6 +36,7 @@ export default function Pedidos() {
   const [pedidos, setPedidos] = useState<Pedido[]>(() => storePedidos.ler());
   const [expandido, setExpandido] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | StatusPedido>('todos');
+  const [financeiroId, setFinanceiroId] = useState<string | null>(null);
 
   useEffect(() => {
     storePedidos.salvar(pedidos);
@@ -42,6 +44,10 @@ export default function Pedidos() {
 
   function mudarStatus(id: string, status: StatusPedido) {
     setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+  }
+
+  function atualizarPedido(atualizado: Pedido) {
+    setPedidos((prev) => prev.map((p) => (p.id === atualizado.id ? atualizado : p)));
   }
 
   function excluir(id: string) {
@@ -205,6 +211,12 @@ export default function Pedidos() {
                     >
                       💬 WhatsApp
                     </button>
+                    <button
+                      onClick={() => setFinanceiroId(p.id)}
+                      className="py-2 rounded-xl bg-brand text-white text-xs font-black shadow-sm col-span-2"
+                    >
+                      💰 Financeiro
+                    </button>
                   </div>
                   <button
                     onClick={() => excluir(p.id)}
@@ -218,6 +230,19 @@ export default function Pedidos() {
           ))}
         </div>
       )}
+
+      {financeiroId &&
+        (() => {
+          const pedido = pedidos.find((x) => x.id === financeiroId);
+          if (!pedido) return null;
+          return (
+            <Financeiro
+              pedido={pedido}
+              aoFechar={() => setFinanceiroId(null)}
+              aoAtualizar={atualizarPedido}
+            />
+          );
+        })()}
     </div>
   );
 }

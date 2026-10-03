@@ -57,6 +57,16 @@ export interface DadosEmpresa {
 
 export type StatusPedido = 'pendente' | 'aprovado' | 'instalado';
 
+export type TipoMovimentacao = 'entrada' | 'saida';
+
+export interface Movimentacao {
+  id: string;
+  tipo: TipoMovimentacao;
+  descricao: string;
+  valor: number;
+  data: number;
+}
+
 export interface Pedido {
   id: string;
   numero: number;
@@ -71,6 +81,7 @@ export interface Pedido {
   observacoes?: string;
   validadeDias?: number;
   criadoEm: number;
+  movimentacoes?: Movimentacao[]; // financeiro do serviço: entradas e saídas
 }
 
 export const CORES_VIDRO = [
