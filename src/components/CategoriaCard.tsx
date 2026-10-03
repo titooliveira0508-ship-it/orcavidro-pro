@@ -9,7 +9,7 @@ export default function CategoriaCard({ categoria, aoClicar }: Props) {
   return (
     <button
       onClick={aoClicar}
-      className="flex items-center gap-3 w-full bg-white rounded-2xl border border-slate-200 p-3.5 text-left shadow-sm active:scale-[0.99] active:border-teal-400 transition-all"
+      className="flex items-center gap-3 w-full bg-white rounded-2xl border border-slate-200 p-3.5 text-left shadow-sm active:scale-[0.99] active:border-brand transition-all"
     >
       <img
         src={categoria.ilustracao}

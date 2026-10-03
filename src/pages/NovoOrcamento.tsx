@@ -166,7 +166,7 @@ export default function NovoOrcamento() {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={gerarPdfPrevia}
-              className="py-2.5 rounded-2xl border-2 border-teal-600 text-teal-700 font-black text-sm active:scale-[0.99] transition-transform"
+              className="py-2.5 rounded-2xl border-2 border-brand text-brand-dark font-black text-sm active:scale-[0.99] transition-transform"
             >
               📄 Gerar PDF
             </button>
@@ -188,7 +188,7 @@ export default function NovoOrcamento() {
           <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
             <h2 className="text-lg font-black text-slate-900">Fechar pedido</h2>
             <p className="text-sm text-slate-500">
-              Total: <span className="font-black text-teal-700">{formatarMoeda(total)}</span> ·{' '}
+              Total: <span className="font-black text-brand-dark">{formatarMoeda(total)}</span> ·{' '}
               {itens.length} {itens.length === 1 ? 'item' : 'itens'}
             </p>
 
@@ -260,7 +260,7 @@ export default function NovoOrcamento() {
               </button>
               <button
                 onClick={fecharPedido}
-                className="flex-1 py-3 rounded-2xl bg-teal-600 text-white font-black shadow-md"
+                className="flex-1 py-3 rounded-2xl bg-brand text-white font-black shadow-md"
               >
                 Confirmar
               </button>

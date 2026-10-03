@@ -71,7 +71,7 @@ export default function Carrinho({ itens, aoRemover, aoLimpar, aoFecharPedido }:
                   )}
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-black text-teal-700">{formatarMoeda(item.valor)}</p>
+                  <p className="text-sm font-black text-brand-dark">{formatarMoeda(item.valor)}</p>
                   <button
                     onClick={() => aoRemover(item.id)}
                     className="text-xs font-semibold text-red-500 mt-1"
@@ -85,16 +85,16 @@ export default function Carrinho({ itens, aoRemover, aoLimpar, aoFecharPedido }:
         </ul>
       )}
 
-      <div className="px-4 py-3 bg-teal-50 border-t border-teal-100 flex items-center justify-between">
+      <div className="px-4 py-3 bg-brand-light border-t border-brand-tint flex items-center justify-between">
         <span className="text-sm font-bold text-slate-700 uppercase tracking-wide">Total</span>
-        <span className="text-xl font-black text-teal-700">{formatarMoeda(total)}</span>
+        <span className="text-xl font-black text-brand-dark">{formatarMoeda(total)}</span>
       </div>
 
       {itens.length > 0 && (
         <div className="p-3">
           <button
             onClick={aoFecharPedido}
-            className="w-full py-3 rounded-2xl bg-teal-600 text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
+            className="w-full py-3 rounded-2xl bg-brand text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
           >
             Fechar pedido
           </button>

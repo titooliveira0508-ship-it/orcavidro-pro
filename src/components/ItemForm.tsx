@@ -65,12 +65,12 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   }
 
   const campo =
-    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500';
+    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand';
   const rotulo = 'block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1';
 
   return (
     <div className="pb-4">
-      <button onClick={aoVoltar} className="text-sm font-semibold text-teal-700 mb-3">
+      <button onClick={aoVoltar} className="text-sm font-semibold text-brand-dark mb-3">
         ‹ Voltar às categorias
       </button>
 
@@ -101,7 +101,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
                   onClick={() => setSubOpcao(s.id)}
                   className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
                     subOpcao === s.id
-                      ? 'bg-teal-600 border-teal-600 text-white'
+                      ? 'bg-brand border-brand text-white'
                       : 'bg-white border-slate-300 text-slate-600'
                   }`}
                 >
@@ -145,7 +145,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
                 onClick={() => setAlturaOpcao(a.valor)}
                 className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
                   alturaOpcao === a.valor
-                    ? 'bg-teal-600 border-teal-600 text-white'
+                    ? 'bg-brand border-brand text-white'
                     : 'bg-white border-slate-300 text-slate-600'
                 }`}
               >
@@ -246,7 +246,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
 
         <button
           onClick={adicionar}
-          className="w-full py-3 rounded-2xl bg-teal-600 text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
+          className="w-full py-3 rounded-2xl bg-brand text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
         >
           Adicionar ao orçamento
         </button>

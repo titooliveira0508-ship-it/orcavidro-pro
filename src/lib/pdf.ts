@@ -43,7 +43,7 @@ function detalhesItem(item: ItemOrcamento): string {
   return partes.join(' · ');
 }
 
-const COR_TEMA: [number, number, number] = [13, 115, 119]; // teal-700
+const COR_TEMA: [number, number, number] = [11, 42, 110]; // azul marinho da logo
 const CINZA: [number, number, number] = [100, 116, 139];
 const PRETO: [number, number, number] = [30, 41, 59];
 

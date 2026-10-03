@@ -19,7 +19,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans">
-      <header className="bg-teal-800 text-white sticky top-0 z-10 shadow-md">
+      <header className="bg-navy text-white sticky top-0 z-10 shadow-md">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center gap-2.5">
           <img
             src="/icon-512.png"
@@ -28,7 +28,7 @@ export default function App() {
           />
           <div>
             <h1 className="text-base font-black leading-tight tracking-tight">OrçaVidro Pro</h1>
-            <p className="text-[11px] text-teal-200 leading-tight">Orçamentos para vidraçaria</p>
+            <p className="text-[11px] text-sky-200 leading-tight">Orçamentos para vidraçaria</p>
           </div>
         </div>
       </header>

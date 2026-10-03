@@ -59,7 +59,7 @@ export default function Clientes() {
   }
 
   const campo =
-    'w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+    'w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
   return (
     <div className="space-y-4">
@@ -67,7 +67,7 @@ export default function Clientes() {
         <h1 className="text-xl font-black text-slate-900">Clientes</h1>
         <button
           onClick={abrirNovo}
-          className="px-4 py-2 rounded-full bg-teal-600 text-white text-sm font-bold shadow-md"
+          className="px-4 py-2 rounded-full bg-brand text-white text-sm font-bold shadow-md"
         >
           + Novo
         </button>
@@ -90,7 +90,7 @@ export default function Clientes() {
               <div className="flex gap-3 mt-2">
                 <button
                   onClick={() => abrirEdicao(c)}
-                  className="text-xs font-bold text-teal-700"
+                  className="text-xs font-bold text-brand-dark"
                 >
                   Editar
                 </button>
@@ -141,7 +141,7 @@ export default function Clientes() {
               <button
                 onClick={salvar}
                 disabled={!nome.trim()}
-                className="flex-1 py-3 rounded-2xl bg-teal-600 text-white font-black shadow-md disabled:opacity-40"
+                className="flex-1 py-3 rounded-2xl bg-brand text-white font-black shadow-md disabled:opacity-40"
               >
                 Salvar
               </button>

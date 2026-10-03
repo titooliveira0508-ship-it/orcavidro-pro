@@ -19,7 +19,7 @@ export default function Empresa() {
   }
 
   const campo =
-    'w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+    'w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
   return (
     <div className="space-y-4">
@@ -75,7 +75,7 @@ export default function Empresa() {
 
         <button
           onClick={salvar}
-          className="w-full py-3 rounded-2xl bg-teal-600 text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
+          className="w-full py-3 rounded-2xl bg-brand text-white font-black text-base shadow-md active:scale-[0.99] transition-transform"
         >
           Salvar dados
         </button>

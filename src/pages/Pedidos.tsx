@@ -85,7 +85,7 @@ export default function Pedidos() {
             onClick={() => setFiltro(f)}
             className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors ${
               filtro === f
-                ? 'bg-teal-600 border-teal-600 text-white'
+                ? 'bg-brand border-brand text-white'
                 : 'bg-white border-slate-300 text-slate-500'
             }`}
           >
@@ -118,7 +118,7 @@ export default function Pedidos() {
                     {p.pagamento ? ` · ${p.pagamento}` : ''}
                   </p>
                 </div>
-                <span className="text-base font-black text-teal-700 shrink-0">
+                <span className="text-base font-black text-brand-dark shrink-0">
                   {formatarMoeda(p.total)}
                 </span>
               </button>
@@ -161,7 +161,7 @@ export default function Pedidos() {
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       onClick={() => gerarPdf(p)}
-                      className="py-2 rounded-xl border-2 border-teal-600 text-teal-700 text-xs font-black"
+                      className="py-2 rounded-xl border-2 border-brand text-brand-dark text-xs font-black"
                     >
                       📄 Gerar PDF
                     </button>

@@ -70,13 +70,13 @@ export default function BottomNav({ ativa, aoTrocar, qtdCarrinho }: Props) {
               key={aba.id}
               onClick={() => aoTrocar(aba.id)}
               className={`relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors ${
-                selecionada ? 'text-teal-700' : 'text-slate-400'
+                selecionada ? 'text-brand-dark' : 'text-slate-400'
               }`}
             >
               <span className="leading-none">{aba.svg}</span>
               {aba.rotulo}
               {aba.id === 'orcamento' && qtdCarrinho > 0 && (
-                <span className="absolute top-1 right-1/2 translate-x-7 min-w-[20px] h-5 px-1 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center">
+                <span className="absolute top-1 right-1/2 translate-x-7 min-w-[20px] h-5 px-1 rounded-full bg-brand text-white text-[11px] font-bold flex items-center justify-center">
                   {qtdCarrinho}
                 </span>
               )}
