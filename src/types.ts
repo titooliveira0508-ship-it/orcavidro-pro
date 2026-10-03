@@ -53,6 +53,7 @@ export interface DadosEmpresa {
   nome: string;
   endereco: string;
   telefone: string;
+  logo?: string; // base64 da logo enviada pelo usuário (aparece no PDF)
 }
 
 export type StatusPedido = 'pendente' | 'aprovado' | 'instalado';

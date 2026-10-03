@@ -118,7 +118,10 @@ const ALT_LINHA_CAB = 9;
 
 async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
   // Pré-carrega logo + diagramas técnicos dos itens
-  const logoBase64 = await carregarImagem('/logo-empresa.png').catch(() => null);
+  // Logo personalizada da empresa (upload) tem prioridade; senão usa a padrão
+  const logoBase64 =
+    d.empresa.logo ||
+    (await carregarImagem('/logo-empresa.png').catch(() => null));
   const diagramas = new Map<string, string | null>();
   for (const item of d.itens) {
     const chave = chaveDiagrama(item);
