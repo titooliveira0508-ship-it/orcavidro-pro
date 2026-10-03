@@ -67,3 +67,27 @@ export function novoId(prefixo: string): string {
 export function formatarMoeda(valor: number): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
+
+// ─── Cálculos do orçamento ───────────────────────────────────────────────────
+// quantidadeDe: fallback para itens antigos salvos sem o campo quantidade
+export function quantidadeDe(item: ItemOrcamento): number {
+  const q = item.quantidade;
+  return typeof q === 'number' && q > 0 ? Math.floor(q) : 1;
+}
+
+export function totalItem(item: ItemOrcamento): number {
+  return item.valor * quantidadeDe(item);
+}
+
+export function subtotalItens(itens: ItemOrcamento[]): number {
+  return itens.reduce((acc, i) => acc + totalItem(i), 0);
+}
+
+export function descontoDe(pedido: Pedido): number {
+  const d = pedido.desconto;
+  return typeof d === 'number' && d > 0 ? d : 0;
+}
+
+export function totalPedido(subtotal: number, desconto: number): number {
+  return Math.max(0, subtotal - (desconto > 0 ? desconto : 0));
+}

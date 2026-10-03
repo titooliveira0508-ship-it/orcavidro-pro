@@ -31,7 +31,8 @@ export interface ItemOrcamento {
   corDobradica?: string;
   modeloDobradica?: string;
   pelicula?: string; // ex.: "Privativa", "Segurança" ou ""
-  valor: number; // valor em R$ digitado pelo usuário
+  valor: number; // valor unitário em R$ digitado pelo usuário
+  quantidade: number; // quantidade do item (padrão 1)
   observacao?: string;
 }
 
@@ -57,7 +58,9 @@ export interface Pedido {
   clienteId?: string;
   clienteNome: string;
   itens: ItemOrcamento[];
-  total: number;
+  subtotal: number; // soma de (valor unitário × quantidade) dos itens
+  desconto: number; // desconto em R$ aplicado no fechamento
+  total: number; // subtotal − desconto
   status: StatusPedido;
   pagamento?: string; // ex.: "Pix", "Cartão"
   observacoes?: string;

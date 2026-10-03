@@ -9,6 +9,8 @@ import {
   storeClientes,
   storeEmpresa,
   storePedidos,
+  subtotalItens,
+  totalPedido,
 } from '../lib/storage';
 import {
   gerarPdfOrcamento,
@@ -30,6 +32,7 @@ export default function NovoOrcamento() {
   const [pagamento, setPagamento] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [validadeDias, setValidadeDias] = useState(15);
+  const [desconto, setDesconto] = useState(0);
   const [pedidoFeito, setPedidoFeito] = useState<number | null>(null);
 
   useEffect(() => {
@@ -37,11 +40,18 @@ export default function NovoOrcamento() {
   }, [itens]);
 
   const categoria = categoriaId ? getCategoria(categoriaId) : undefined;
-  const total = itens.reduce((acc, i) => acc + i.valor, 0);
+  const subtotal = subtotalItens(itens);
+  const total = totalPedido(subtotal, desconto);
 
   function adicionarItem(item: ItemOrcamento) {
     setItens((prev) => [...prev, item]);
     setCategoriaId(null);
+  }
+
+  function alterarQuantidade(id: string, quantidade: number) {
+    setItens((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, quantidade: Math.max(1, quantidade) } : i))
+    );
   }
 
   function fecharPedido() {
@@ -53,6 +63,8 @@ export default function NovoOrcamento() {
       clienteId: cliente?.id,
       clienteNome: cliente?.nome ?? 'Cliente avulso',
       itens,
+      subtotal,
+      desconto,
       total,
       status: 'pendente',
       pagamento: pagamento || undefined,
@@ -69,6 +81,7 @@ export default function NovoOrcamento() {
     setPagamento('');
     setObservacoes('');
     setValidadeDias(15);
+    setDesconto(0);
     setPedidoFeito(numero);
     setTimeout(() => setPedidoFeito(null), 4000);
   }
@@ -82,6 +95,8 @@ export default function NovoOrcamento() {
       clienteTelefone: cliente?.telefone || undefined,
       clienteEndereco: cliente?.endereco || undefined,
       itens,
+      subtotal,
+      desconto,
       total,
       validadeDias: validadeDias > 0 ? validadeDias : 15,
       observacoes: observacoes.trim() || undefined,
@@ -141,6 +156,9 @@ export default function NovoOrcamento() {
 
       <Carrinho
         itens={itens}
+        desconto={desconto}
+        aoAlterarDesconto={setDesconto}
+        aoAlterarQuantidade={alterarQuantidade}
         aoRemover={(id) => setItens((prev) => prev.filter((i) => i.id !== id))}
         aoLimpar={() => {
           setItens([]);
@@ -187,10 +205,25 @@ export default function NovoOrcamento() {
         <div className="fixed inset-0 z-30 bg-slate-900/50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[92vh] overflow-y-auto">
             <h2 className="text-lg font-black text-slate-900">Fechar pedido</h2>
-            <p className="text-sm text-slate-500">
-              Total: <span className="font-black text-brand-dark">{formatarMoeda(total)}</span> ·{' '}
-              {itens.length} {itens.length === 1 ? 'item' : 'itens'}
-            </p>
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Subtotal</span>
+                <span className="font-bold text-slate-800">{formatarMoeda(subtotal)}</span>
+              </div>
+              {desconto > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Desconto</span>
+                  <span className="font-bold text-emerald-600">− {formatarMoeda(desconto)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                <span className="text-sm font-black text-slate-800">Total</span>
+                <span className="text-lg font-black text-brand-dark">{formatarMoeda(total)}</span>
+              </div>
+              <p className="text-xs text-slate-400">
+                {itens.length} {itens.length === 1 ? 'item' : 'itens'}
+              </p>
+            </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1">

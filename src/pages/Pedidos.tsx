@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Pedido, StatusPedido } from '../types';
-import { formatarMoeda, storeClientes, storeEmpresa, storePedidos } from '../lib/storage';
+import {
+  descontoDe,
+  formatarMoeda,
+  quantidadeDe,
+  storeClientes,
+  storeEmpresa,
+  storePedidos,
+  subtotalItens,
+  totalItem,
+} from '../lib/storage';
 import {
   gerarPdfOrcamento,
   linkWhatsApp,
@@ -44,6 +53,9 @@ export default function Pedidos() {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
+    // Fallback para pedidos antigos (sem subtotal/desconto salvos)
+    const subtotal = typeof p.subtotal === 'number' ? p.subtotal : subtotalItens(p.itens);
+    const desconto = descontoDe(p);
     await gerarPdfOrcamento({
       empresa: storeEmpresa.ler(),
       numero: p.numero,
@@ -51,6 +63,8 @@ export default function Pedidos() {
       clienteTelefone: cliente?.telefone || undefined,
       clienteEndereco: cliente?.endereco || undefined,
       itens: p.itens,
+      subtotal,
+      desconto,
       total: p.total,
       validadeDias: p.validadeDias && p.validadeDias > 0 ? p.validadeDias : 15,
       observacoes: p.observacoes,
@@ -140,18 +154,38 @@ export default function Pedidos() {
               {expandido === p.id && (
                 <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-2">
                   <ul className="space-y-1.5">
-                    {p.itens.map((item) => (
-                      <li key={item.id} className="flex justify-between text-xs">
-                        <span className="text-slate-600">
-                          {item.categoriaNome}
-                          {item.subOpcao ? ` (${item.subOpcao})` : ''}
-                        </span>
-                        <span className="font-bold text-slate-800">
-                          {formatarMoeda(item.valor)}
-                        </span>
-                      </li>
-                    ))}
+                    {p.itens.map((item) => {
+                      const qtd = quantidadeDe(item);
+                      return (
+                        <li key={item.id} className="flex justify-between text-xs">
+                          <span className="text-slate-600">
+                            {item.categoriaNome}
+                            {item.subOpcao ? ` (${item.subOpcao})` : ''}
+                            {qtd > 1 ? ` × ${qtd}` : ''}
+                          </span>
+                          <span className="font-bold text-slate-800">
+                            {formatarMoeda(totalItem(item))}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
+                  {descontoDe(p) > 0 && (
+                    <div className="pt-1 space-y-1 text-xs border-t border-slate-100">
+                      <div className="flex justify-between text-slate-500">
+                        <span>Subtotal</span>
+                        <span className="font-semibold">
+                          {formatarMoeda(
+                            typeof p.subtotal === 'number' ? p.subtotal : subtotalItens(p.itens)
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-emerald-600">
+                        <span>Desconto</span>
+                        <span className="font-semibold">− {formatarMoeda(descontoDe(p))}</span>
+                      </div>
+                    </div>
+                  )}
                   {p.observacoes && (
                     <p className="text-xs text-slate-500 italic">“{p.observacoes}”</p>
                   )}

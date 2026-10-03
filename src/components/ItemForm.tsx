@@ -34,6 +34,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   const [modeloDobradica, setModeloDobradica] = useState<string>(MODELOS_DOBRADICA[0]);
   const [pelicula, setPelicula] = useState<string>('');
   const [valorTexto, setValorTexto] = useState('');
+  const [quantidadeTexto, setQuantidadeTexto] = useState('1');
   const [observacao, setObservacao] = useState('');
   const [erro, setErro] = useState('');
 
@@ -45,6 +46,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       setErro('Informe o valor do item em R$.');
       return;
     }
+    const quantidade = Math.max(1, Math.floor(parseNumero(quantidadeTexto)) || 1);
     const item: ItemOrcamento = {
       id: novoId('item'),
       categoriaId: categoria.id,
@@ -59,6 +61,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
       modeloDobradica: categoria.temDobradiça ? modeloDobradica : undefined,
       pelicula: pelicula || undefined,
       valor,
+      quantidade,
       observacao: observacao.trim() || undefined,
     };
     aoAdicionar(item);
@@ -219,19 +222,31 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
           </select>
         </div>
 
-        <div>
-          <label className={rotulo}>Valor do item (R$)</label>
-          <input
-            inputMode="decimal"
-            placeholder="Ex.: 850,00"
-            value={valorTexto}
-            onChange={(e) => {
-              setValorTexto(e.target.value);
-              setErro('');
-            }}
-            className={`${campo} text-lg font-bold`}
-          />
-          {erro && <p className="text-xs text-red-600 font-semibold mt-1">{erro}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={rotulo}>Valor unitário (R$)</label>
+            <input
+              inputMode="decimal"
+              placeholder="Ex.: 850,00"
+              value={valorTexto}
+              onChange={(e) => {
+                setValorTexto(e.target.value);
+                setErro('');
+              }}
+              className={`${campo} text-lg font-bold`}
+            />
+            {erro && <p className="text-xs text-red-600 font-semibold mt-1">{erro}</p>}
+          </div>
+          <div>
+            <label className={rotulo}>Quantidade</label>
+            <input
+              inputMode="numeric"
+              placeholder="1"
+              value={quantidadeTexto}
+              onChange={(e) => setQuantidadeTexto(e.target.value)}
+              className={`${campo} text-lg font-bold text-center`}
+            />
+          </div>
         </div>
 
         <div>
