@@ -201,7 +201,7 @@ async function responderComIA(telefone, textoCliente) {
       '\nAtendente:';
 
     const resp = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { maxOutputTokens: 600, temperature: 0.8 },
@@ -211,7 +211,9 @@ async function responderComIA(telefone, textoCliente) {
     const texto = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     return texto || null;
   } catch (e) {
-    console.log('⚠️  Gemini indisponível:', e.message);
+    const status = e.response?.status;
+    const detalhe = e.response?.data?.error?.message || e.message;
+    console.log(`⚠️  Gemini indisponível: HTTP ${status} → ${detalhe}`);
     return null;
   }
 }
