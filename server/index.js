@@ -116,50 +116,109 @@ async function enviarWhatsApp(para, texto) {
   }
 }
 
-// ─── Humanização via Gemini ─────────────────────────────────────────────────
-// Reescreve a mensagem do bot num tom mais humano, quente e natural,
-// mantendo TODAS as informações importantes (sem inventar nada, sem preços).
-// Se o Gemini falhar, usa o texto original (fallback seguro).
-async function humanizar(textoBase, nome) {
-  if (!GEMINI_API_KEY) return textoBase;
+// ─── IA conversacional via Gemini ───────────────────────────────────────────
+// O bot é 100% conduzido pela IA: o cliente fala livremente o que precisa,
+// a IA identifica o nicho (vidraçaria ou apps) e conduz a conversa.
+// Quando tiver todos os dados, a IA sinaliza com um bloco JSON [LEAD].
+// Se o Gemini falhar, usa mensagens simples de fallback.
+
+const SYSTEM_PROMPT = `Você é o atendente virtual de WhatsApp de dois negócios do Tito:
+
+1. 🪟 M. OLIVEIRA ENVIDRAÇAMENTOS (vidraçaria no RJ) — trabalha SOMENTE com vidro temperado/blindex: box (frontal, de abrir, de canto, flex), janelas, portas de correr, porta pivotante, espelhos, armário de pia, guarda-corpo, cortina de vidro, báscula. NUNCA esquadrias de alumínio.
+
+2. 📱 LAA-APPS — desenvolvimento de aplicativos e sistemas sob encomenda.
+
+COMO CONVERSAR:
+- Seja caloroso, natural e humano, como uma pessoa real no WhatsApp. Português brasileiro informal.
+- Use 1-2 emojis por mensagem, sem exagero. Mensagens curtas (estilo WhatsApp).
+- Deixe o cliente falar livremente. Identifique sozinho se é vidraçaria ou app pela mensagem dele.
+- Se não der pra identificar, pergunte de forma natural: "me conta, é sobre vidro/box ou sobre aplicativo/sistema?"
+- Para VIDRAÇARIA, colete: nome da pessoa, endereço (rua, número, bairro) e tipo de serviço.
+- Para LAA-APPS, colete: nome da pessoa e descrição da ideia do app/sistema.
+- Faça UMA pergunta por vez, com naturalidade. Não interrogue de forma robótica.
+
+REGRAS DURAS (nunca quebre):
+- NUNCA informe preços, valores, orçamentos ou tabelas. Se perguntarem, diga que cada orçamento é personalizado e o Tito vai passar.
+- NUNCA invente serviços que não existem na lista da vidraçaria.
+- NUNCA diga que você é o Tito. Você é o assistente virtual.
+
+QUANDO TIVER TODOS OS DADOS:
+- Agradeça e confirme os dados de forma resumida.
+- Diga que o responsável vai entrar em contato em breve.
+- No FINAL da sua resposta, em linha separada, inclua EXATAMENTE este bloco (preencha os campos):
+[LEAD]
+{"area":"vidracaria ou laaapps","nome":"...","endereco":"...","servico":"...","projeto":"..."}
+[/LEAD]
+- Para vidraçaria preencha nome, endereco e servico (projeto vazio ""). Para apps preencha nome e projeto (endereco e servico vazios "").`;
+
+// Histórico de conversa por telefone (últimas 20 mensagens)
+function getHistorico(telefone) {
+  const estado = getEstado(telefone);
+  if (!estado.historico) estado.historico = [];
+  return estado.historico;
+}
+
+function adicionarHistorico(telefone, papel, texto) {
+  const hist = getHistorico(telefone);
+  hist.push({ papel, texto: (texto || '').slice(0, 1000) });
+  if (hist.length > 20) hist.splice(0, hist.length - 20);
+  salvarEstados();
+}
+
+// Extrai o bloco [LEAD]...[/LEAD] da resposta da IA
+function extrairLead(resposta) {
+  const match = resposta.match(/\[LEAD\]\s*(\{[\s\S]*?\})\s*\[\/LEAD\]/);
+  if (!match) return null;
   try {
-    const prompt =
-      'Você é um atendente simpático e caloroso de WhatsApp no Brasil. ' +
-      'Reescreva a mensagem abaixo de forma mais humana, natural e acolhedora, ' +
-      'como se fosse uma pessoa real conversando. ' +
-      'REGRAS OBRIGATÓRIAS:\n' +
-      '- Mantenha TODAS as informações da mensagem original (nomes, opções, perguntas)\n' +
-      '- NÃO invente informações novas\n' +
-      '- NÃO fale de preços ou valores em hipótese alguma\n' +
-      '- Use português brasileiro informal e amigável\n' +
-      '- Pode usar 1-2 emojis, sem exagero\n' +
-      '- Se souber o nome da pessoa (' + (nome || 'desconhecido') + '), pode usá-lo com naturalidade\n' +
-      '- Responda APENAS com a mensagem reescrita, sem explicações\n\n' +
-      'Mensagem original:\n' + textoBase;
+    const dados = JSON.parse(match[1]);
+    if (!dados.nome) return null;
+    return dados;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Remove o bloco [LEAD] da mensagem antes de enviar ao cliente
+function limparResposta(resposta) {
+  return resposta.replace(/\[LEAD\][\s\S]*?\[\/LEAD\]/g, '').trim();
+}
+
+// Gera a resposta da IA com base no histórico
+async function responderComIA(telefone, textoCliente) {
+  if (!GEMINI_API_KEY) return null;
+  try {
+    const hist = getHistorico(telefone);
+    const conversa = hist.map((h) =>
+      h.papel === 'cliente' ? `Cliente: ${h.texto}` : `Atendente: ${h.texto}`
+    ).join('\n');
+
+    const prompt = SYSTEM_PROMPT +
+      '\n\n--- HISTÓRICO DA CONVERSA ---\n' + (conversa || '(início da conversa)') +
+      '\n\nCliente: ' + textoCliente +
+      '\nAtendente:';
 
     const resp = await axios.post(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+        generationConfig: { maxOutputTokens: 600, temperature: 0.8 },
       },
-      { timeout: 15000 }
+      { timeout: 20000 }
     );
-    const reescrita = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (reescrita && reescrita.length > 10 && reescrita.length < 2000) {
-      return reescrita;
-    }
-    return textoBase;
+    const texto = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    return texto || null;
   } catch (e) {
-    console.log('⚠️  Gemini indisponível, usando texto original:', e.message);
-    return textoBase;
+    console.log('⚠️  Gemini indisponível:', e.message);
+    return null;
   }
 }
 
-// Envia mensagem já humanizada (atalho para não repetir humanizar+enviar)
-async function enviarHumanizado(para, textoBase, nome) {
-  const texto = await humanizar(textoBase, nome);
-  return enviarWhatsApp(para, texto);
+// Mensagens simples de fallback (se a IA estiver fora do ar)
+function textoFallbackBoasVindas() {
+  return (
+    'Olá! 👋 Bem-vindo(a)!\n\n' +
+    'Sou o assistente virtual. Me conta o que você precisa — pode falar livremente! 😊'
+  );
 }
 
 // ─── Textos do bot (pt-BR) ──────────────────────────────────────────────────
@@ -269,7 +328,7 @@ function salvarLead(telefone, dados) {
   console.log('');
 }
 
-// ─── Máquina de estados da conversa ─────────────────────────────────────────
+// ─── Processamento da mensagem (100% IA) ────────────────────────────────────
 async function processarMensagem(telefone, textoRecebido) {
   const texto = (textoRecebido || '').trim();
   const estado = getEstado(telefone);
@@ -277,148 +336,61 @@ async function processarMensagem(telefone, textoRecebido) {
   // Comandos de reinício
   if (/^(cancelar|recomeçar|recomecar|reiniciar|menu)$/i.test(texto)) {
     resetarEstado(telefone);
-    await enviarHumanizado(telefone, textoBoasVindas());
-    estados[telefone].etapa = 'aguardando_nome';
+    adicionarHistorico(telefone, 'atendente', textoFallbackBoasVindas());
+    await enviarWhatsApp(telefone, textoFallbackBoasVindas());
+    return;
+  }
+
+  // Se a conversa já foi concluída e a pessoa continua falando: oferece recomeçar
+  // (a IA também lida com isso, mas garantimos uma resposta mesmo sem Gemini)
+  if (estado.etapa === 'concluido' && !GEMINI_API_KEY) {
+    await enviarWhatsApp(
+      telefone,
+      'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\n' +
+        'Se quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
+    );
+    return;
+  }
+
+  // Registra a mensagem do cliente no histórico
+  adicionarHistorico(telefone, 'cliente', texto);
+
+  // Tenta responder com a IA
+  const respostaIA = await responderComIA(telefone, texto);
+
+  if (!respostaIA) {
+    // Fallback: sem Gemini, usa mensagem simples e guia pelo básico
+    const fallback = estado.etapa === 'inicio' || !getHistorico(telefone).length
+      ? textoFallbackBoasVindas()
+      : 'Entendi! 👍 Me conta mais um pouco pra eu te ajudar melhor.';
+    adicionarHistorico(telefone, 'atendente', fallback);
+    await enviarWhatsApp(telefone, fallback);
+    if (estado.etapa === 'inicio') estado.etapa = 'conversando';
     salvarEstados();
     return;
   }
 
-  // Se perguntou de preço em qualquer etapa: responde sem passar valores
-  // (mas não interrompe o fluxo — continua de onde parou)
-  if (texto && perguntaPreco(texto) && estado.etapa !== 'concluido' && estado.area === 'vidracaria') {
-    await enviarHumanizado(telefone, textoPreco());
-    // Reenvia a pergunta atual para não travar a conversa
-    if (estado.etapa === 'aguardando_nome') {
-      await enviarHumanizado(telefone, 'Qual é o seu *nome*?');
-    } else if (estado.etapa === 'aguardando_endereco') {
-      await enviarHumanizado(telefone, textoPedeEndereco(estado.nome || 'amigo(a)'));
-    } else if (estado.etapa === 'aguardando_servico') {
-      await enviarHumanizado(telefone, textoPedeServico());
-    } else {
-      await enviarHumanizado(telefone, textoBoasVindas());
-      estado.etapa = 'escolhendo_area';
-      salvarEstados();
-    }
-    return;
+  // Verifica se a IA concluiu o lead
+  const lead = extrairLead(respostaIA);
+  const textoLimpo = limparResposta(respostaIA);
+
+  adicionarHistorico(telefone, 'atendente', textoLimpo);
+  if (textoLimpo) {
+    await enviarWhatsApp(telefone, textoLimpo);
   }
 
-  switch (estado.etapa) {
-    case 'inicio': {
-      await enviarHumanizado(telefone, textoBoasVindas());
-      estado.etapa = 'escolhendo_area';
-      salvarEstados();
-      break;
-    }
-
-    case 'escolhendo_area': {
-      const t = texto.toLowerCase();
-      if (t === '1' || t.includes('vidro') || t.includes('envidra') || t.includes('oliveira')) {
-        estado.area = 'vidracaria';
-        estado.etapa = 'aguardando_nome';
-        salvarEstados();
-        await enviarHumanizado(telefone, 'Ótimo! 🪟 Vamos falar de *envidraçamento*.\n\nQual é o seu *nome*?');
-      } else if (t === '2' || t.includes('app') || t.includes('sistema') || t.includes('laa')) {
-        estado.area = 'laaapps';
-        estado.etapa = 'aguardando_nome_app';
-        salvarEstados();
-        await enviarHumanizado(telefone, 'Ótimo! 📱 Vamos falar de *aplicativos e sistemas*.\n\nQual é o seu *nome*?');
-      } else {
-        await enviarHumanizado(
-          telefone,
-          'Não entendi. 🤔\n\nDigite *1* para 🪟 *M. Oliveira Envidraçamentos*\nDigite *2* para 📱 *LAA-APPS*'
-        );
-      }
-      break;
-    }
-
-    case 'aguardando_nome': {
-      if (!texto) {
-        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *nome*?');
-        break;
-      }
-      estado.nome = texto.slice(0, 80);
-      estado.etapa = 'aguardando_endereco';
-      salvarEstados();
-      await enviarHumanizado(telefone, textoPedeEndereco(estado.nome));
-      break;
-    }
-
-    case 'aguardando_endereco': {
-      if (!texto) {
-        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *endereço* (rua, número e bairro)?');
-        break;
-      }
-      estado.endereco = texto.slice(0, 200);
-      estado.etapa = 'aguardando_servico';
-      salvarEstados();
-      await enviarHumanizado(telefone, textoPedeServico());
-      break;
-    }
-
-    case 'aguardando_servico': {
-      const servico = identificarServico(texto);
-      if (!servico) {
-        await enviarHumanizado(
-          telefone,
-          'Hmm, não identifiquei esse serviço. 🤔\n\n' + textoPedeServico()
-        );
-        break;
-      }
-      estado.servico = servico;
-      estado.etapa = 'concluido';
-      salvarEstados();
-      salvarLead(telefone, estado);
-      await enviarHumanizado(
-        telefone,
-        textoConfirmacao(estado.nome, estado.endereco, estado.servico)
-      );
-      break;
-    }
-
-    case 'aguardando_nome_app': {
-      if (!texto) {
-        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *nome*?');
-        break;
-      }
-      estado.nome = texto.slice(0, 80);
-      estado.etapa = 'aguardando_projeto';
-      salvarEstados();
-      await enviarHumanizado(telefone, textoPedeProjeto(estado.nome));
-      break;
-    }
-
-    case 'aguardando_projeto': {
-      if (!texto) {
-        await enviarHumanizado(telefone, 'Não entendi. Me conta um pouco sobre a sua ideia de *aplicativo ou sistema*?');
-        break;
-      }
-      estado.projeto = texto.slice(0, 500);
-      estado.etapa = 'concluido';
-      salvarEstados();
-      salvarLead(telefone, estado);
-      await enviarHumanizado(
-        telefone,
-        textoConfirmacaoApp(estado.nome, estado.projeto)
-      );
-      break;
-    }
-
-    case 'concluido': {
-      // Conversa já finalizada: oferece recomeçar
-      await enviarHumanizado(
-        telefone,
-        'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\n' +
-          'Se quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
-      );
-      break;
-    }
-
-    default: {
-      resetarEstado(telefone);
-      await enviarHumanizado(telefone, textoBoasVindas());
-      estados[telefone].etapa = 'escolhendo_area';
-      salvarEstados();
-    }
+  if (lead) {
+    estado.etapa = 'concluido';
+    estado.area = lead.area;
+    estado.nome = lead.nome || '';
+    estado.endereco = lead.endereco || '';
+    estado.servico = lead.servico || '';
+    estado.projeto = lead.projeto || '';
+    salvarEstados();
+    salvarLead(telefone, estado);
+  } else if (estado.etapa === 'inicio') {
+    estado.etapa = 'conversando';
+    salvarEstados();
   }
 }
 
@@ -462,7 +434,7 @@ app.post('/webhook', async (req, res) => {
       const texto = tipo === 'text' ? msg.text?.body : '';
 
       if (tipo !== 'text') {
-        await enviarHumanizado(
+        await enviarWhatsApp(
           telefone,
           'Recebi sua mensagem! 👍 Por enquanto consigo ler só mensagens de *texto*. Pode escrever pra mim?'
         );
