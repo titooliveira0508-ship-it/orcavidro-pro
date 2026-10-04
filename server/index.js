@@ -131,11 +131,14 @@ const SYSTEM_PROMPT = `Você é o atendente virtual de WhatsApp de dois negócio
 COMO CONVERSAR:
 - Seja caloroso, natural e humano, como uma pessoa real no WhatsApp. Português brasileiro informal.
 - Use 1-2 emojis por mensagem, sem exagero. Mensagens curtas (estilo WhatsApp).
+- LEIA O HISTÓRICO com atenção: NUNCA repita uma pergunta que já foi feita. NUNCA peça de novo um dado que o cliente já deu.
+- Varie as frases: cada resposta deve soar fresca, nunca copie e cole a mesma mensagem.
 - Deixe o cliente falar livremente. Identifique sozinho se é vidraçaria ou app pela mensagem dele.
 - Se não der pra identificar, pergunte de forma natural: "me conta, é sobre vidro/box ou sobre aplicativo/sistema?"
 - Para VIDRAÇARIA, colete: nome da pessoa, endereço (rua, número, bairro) e tipo de serviço.
 - Para LAA-APPS, colete: nome da pessoa e descrição da ideia do app/sistema.
 - Faça UMA pergunta por vez, com naturalidade. Não interrogue de forma robótica.
+- Se o cliente mandar algo fora do contexto (ex.: "oi", "bom dia"), responda com simpatia e retome de onde parou, sem recomeçar do zero.
 
 REGRAS DURAS (nunca quebre):
 - NUNCA informe preços, valores, orçamentos ou tabelas. Se perguntarem, diga que cada orçamento é personalizado e o Tito vai passar.
@@ -213,12 +216,39 @@ async function responderComIA(telefone, textoCliente) {
   }
 }
 
-// Mensagens simples de fallback (se a IA estiver fora do ar)
+// Mensagens simples de fallback (se a IA estiver fora do ar) — variadas pra não repetir
+const FALLBACKS_CONTINUA = [
+  'Entendi! 👍 Me conta mais um pouquinho pra eu te ajudar melhor.',
+  'Beleza! 😊 E o que mais você pode me contar sobre o que precisa?',
+  'Certo! Tô anotando aqui 📝. Me fala mais detalhes?',
+  'Show! 👍 Continua que tô te ouvindo.',
+];
+function textoFallbackContinua(telefone) {
+  const estado = getEstado(telefone);
+  const i = (estado.fallbackIdx || 0) % FALLBACKS_CONTINUA.length;
+  estado.fallbackIdx = (estado.fallbackIdx || 0) + 1;
+  salvarEstados();
+  return FALLBACKS_CONTINUA[i];
+}
+
 function textoFallbackBoasVindas() {
   return (
     'Olá! 👋 Bem-vindo(a)!\n\n' +
     'Sou o assistente virtual. Me conta o que você precisa — pode falar livremente! 😊'
   );
+}
+
+// Anti-duplicação: ignora a mesma mensagem se chegar repetida em <30s (retry da Meta)
+function mensagemDuplicada(telefone, texto) {
+  const estado = getEstado(telefone);
+  const agora = Date.now();
+  if (estado.ultimaMsg === texto && agora - (estado.ultimaMsgTs || 0) < 30000) {
+    return true;
+  }
+  estado.ultimaMsg = texto;
+  estado.ultimaMsgTs = agora;
+  salvarEstados();
+  return false;
 }
 
 // ─── Textos do bot (pt-BR) ──────────────────────────────────────────────────
@@ -333,6 +363,12 @@ async function processarMensagem(telefone, textoRecebido) {
   const texto = (textoRecebido || '').trim();
   const estado = getEstado(telefone);
 
+  // Ignora mensagem duplicada (retry da Meta em <30s)
+  if (texto && mensagemDuplicada(telefone, texto)) {
+    console.log(`🔁 Mensagem duplicada ignorada de ${telefone}: ${texto.slice(0, 50)}`);
+    return;
+  }
+
   // Comandos de reinício
   if (/^(cancelar|recomeçar|recomecar|reiniciar|menu)$/i.test(texto)) {
     resetarEstado(telefone);
@@ -359,10 +395,11 @@ async function processarMensagem(telefone, textoRecebido) {
   const respostaIA = await responderComIA(telefone, texto);
 
   if (!respostaIA) {
-    // Fallback: sem Gemini, usa mensagem simples e guia pelo básico
-    const fallback = estado.etapa === 'inicio' || !getHistorico(telefone).length
+    // Fallback: sem Gemini, usa mensagens variadas (não repete a mesma)
+    const hist = getHistorico(telefone);
+    const fallback = estado.etapa === 'inicio' || hist.length <= 1
       ? textoFallbackBoasVindas()
-      : 'Entendi! 👍 Me conta mais um pouco pra eu te ajudar melhor.';
+      : textoFallbackContinua(telefone);
     adicionarHistorico(telefone, 'atendente', fallback);
     await enviarWhatsApp(telefone, fallback);
     if (estado.etapa === 'inicio') estado.etapa = 'conversando';
