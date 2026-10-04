@@ -1,11 +1,13 @@
 // ─── OrçaVidro Pro · Bot de WhatsApp (primeiro atendimento) ─────────────────
-// Fluxo: boas-vindas → nome → endereço → tipo de serviço → confirmação.
+// Fluxo: menu (1=vidraçaria, 2=LAA-APPS) → nome → endereço → tipo de serviço → confirmação.
 // O bot NUNCA fala de preços/valores — isso é só com o Tito.
+// As mensagens passam pelo Gemini para um tom mais humano e natural.
 //
 // Variáveis de ambiente (ver server/README.md):
 //   VERIFY_TOKEN    – token de verificação do webhook na Meta
 //   WHATSAPP_TOKEN  – token permanente da API do WhatsApp Cloud
 //   PHONE_NUMBER_ID – ID do número de telefone no WhatsApp Cloud API
+//   GEMINI_API_KEY  – chave da API do Gemini (para humanizar as mensagens)
 //   PORT            – porta do servidor (padrão 3001)
 
 const express = require('express');
@@ -20,6 +22,7 @@ const PORT = process.env.PORT || 3001;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || '';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 const STATE_FILE = path.join(__dirname, 'state.json');
 const LEADS_FILE = path.join(__dirname, 'leads.json');
@@ -111,6 +114,52 @@ async function enviarWhatsApp(para, texto) {
     console.log('❌ Erro ao enviar mensagem para', para, '→', detalhe);
     return false;
   }
+}
+
+// ─── Humanização via Gemini ─────────────────────────────────────────────────
+// Reescreve a mensagem do bot num tom mais humano, quente e natural,
+// mantendo TODAS as informações importantes (sem inventar nada, sem preços).
+// Se o Gemini falhar, usa o texto original (fallback seguro).
+async function humanizar(textoBase, nome) {
+  if (!GEMINI_API_KEY) return textoBase;
+  try {
+    const prompt =
+      'Você é um atendente simpático e caloroso de WhatsApp no Brasil. ' +
+      'Reescreva a mensagem abaixo de forma mais humana, natural e acolhedora, ' +
+      'como se fosse uma pessoa real conversando. ' +
+      'REGRAS OBRIGATÓRIAS:\n' +
+      '- Mantenha TODAS as informações da mensagem original (nomes, opções, perguntas)\n' +
+      '- NÃO invente informações novas\n' +
+      '- NÃO fale de preços ou valores em hipótese alguma\n' +
+      '- Use português brasileiro informal e amigável\n' +
+      '- Pode usar 1-2 emojis, sem exagero\n' +
+      '- Se souber o nome da pessoa (' + (nome || 'desconhecido') + '), pode usá-lo com naturalidade\n' +
+      '- Responda APENAS com a mensagem reescrita, sem explicações\n\n' +
+      'Mensagem original:\n' + textoBase;
+
+    const resp = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 500, temperature: 0.7 },
+      },
+      { timeout: 15000 }
+    );
+    const reescrita = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (reescrita && reescrita.length > 10 && reescrita.length < 2000) {
+      return reescrita;
+    }
+    return textoBase;
+  } catch (e) {
+    console.log('⚠️  Gemini indisponível, usando texto original:', e.message);
+    return textoBase;
+  }
+}
+
+// Envia mensagem já humanizada (atalho para não repetir humanizar+enviar)
+async function enviarHumanizado(para, textoBase, nome) {
+  const texto = await humanizar(textoBase, nome);
+  return enviarWhatsApp(para, texto);
 }
 
 // ─── Textos do bot (pt-BR) ──────────────────────────────────────────────────
@@ -228,7 +277,7 @@ async function processarMensagem(telefone, textoRecebido) {
   // Comandos de reinício
   if (/^(cancelar|recomeçar|recomecar|reiniciar|menu)$/i.test(texto)) {
     resetarEstado(telefone);
-    await enviarWhatsApp(telefone, textoBoasVindas());
+    await enviarHumanizado(telefone, textoBoasVindas());
     estados[telefone].etapa = 'aguardando_nome';
     salvarEstados();
     return;
@@ -237,16 +286,16 @@ async function processarMensagem(telefone, textoRecebido) {
   // Se perguntou de preço em qualquer etapa: responde sem passar valores
   // (mas não interrompe o fluxo — continua de onde parou)
   if (texto && perguntaPreco(texto) && estado.etapa !== 'concluido' && estado.area === 'vidracaria') {
-    await enviarWhatsApp(telefone, textoPreco());
+    await enviarHumanizado(telefone, textoPreco());
     // Reenvia a pergunta atual para não travar a conversa
     if (estado.etapa === 'aguardando_nome') {
-      await enviarWhatsApp(telefone, 'Qual é o seu *nome*?');
+      await enviarHumanizado(telefone, 'Qual é o seu *nome*?');
     } else if (estado.etapa === 'aguardando_endereco') {
-      await enviarWhatsApp(telefone, textoPedeEndereco(estado.nome || 'amigo(a)'));
+      await enviarHumanizado(telefone, textoPedeEndereco(estado.nome || 'amigo(a)'));
     } else if (estado.etapa === 'aguardando_servico') {
-      await enviarWhatsApp(telefone, textoPedeServico());
+      await enviarHumanizado(telefone, textoPedeServico());
     } else {
-      await enviarWhatsApp(telefone, textoBoasVindas());
+      await enviarHumanizado(telefone, textoBoasVindas());
       estado.etapa = 'escolhendo_area';
       salvarEstados();
     }
@@ -255,7 +304,7 @@ async function processarMensagem(telefone, textoRecebido) {
 
   switch (estado.etapa) {
     case 'inicio': {
-      await enviarWhatsApp(telefone, textoBoasVindas());
+      await enviarHumanizado(telefone, textoBoasVindas());
       estado.etapa = 'escolhendo_area';
       salvarEstados();
       break;
@@ -267,14 +316,14 @@ async function processarMensagem(telefone, textoRecebido) {
         estado.area = 'vidracaria';
         estado.etapa = 'aguardando_nome';
         salvarEstados();
-        await enviarWhatsApp(telefone, 'Ótimo! 🪟 Vamos falar de *envidraçamento*.\n\nQual é o seu *nome*?');
+        await enviarHumanizado(telefone, 'Ótimo! 🪟 Vamos falar de *envidraçamento*.\n\nQual é o seu *nome*?');
       } else if (t === '2' || t.includes('app') || t.includes('sistema') || t.includes('laa')) {
         estado.area = 'laaapps';
         estado.etapa = 'aguardando_nome_app';
         salvarEstados();
-        await enviarWhatsApp(telefone, 'Ótimo! 📱 Vamos falar de *aplicativos e sistemas*.\n\nQual é o seu *nome*?');
+        await enviarHumanizado(telefone, 'Ótimo! 📱 Vamos falar de *aplicativos e sistemas*.\n\nQual é o seu *nome*?');
       } else {
-        await enviarWhatsApp(
+        await enviarHumanizado(
           telefone,
           'Não entendi. 🤔\n\nDigite *1* para 🪟 *M. Oliveira Envidraçamentos*\nDigite *2* para 📱 *LAA-APPS*'
         );
@@ -284,32 +333,32 @@ async function processarMensagem(telefone, textoRecebido) {
 
     case 'aguardando_nome': {
       if (!texto) {
-        await enviarWhatsApp(telefone, 'Não entendi. Qual é o seu *nome*?');
+        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *nome*?');
         break;
       }
       estado.nome = texto.slice(0, 80);
       estado.etapa = 'aguardando_endereco';
       salvarEstados();
-      await enviarWhatsApp(telefone, textoPedeEndereco(estado.nome));
+      await enviarHumanizado(telefone, textoPedeEndereco(estado.nome));
       break;
     }
 
     case 'aguardando_endereco': {
       if (!texto) {
-        await enviarWhatsApp(telefone, 'Não entendi. Qual é o seu *endereço* (rua, número e bairro)?');
+        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *endereço* (rua, número e bairro)?');
         break;
       }
       estado.endereco = texto.slice(0, 200);
       estado.etapa = 'aguardando_servico';
       salvarEstados();
-      await enviarWhatsApp(telefone, textoPedeServico());
+      await enviarHumanizado(telefone, textoPedeServico());
       break;
     }
 
     case 'aguardando_servico': {
       const servico = identificarServico(texto);
       if (!servico) {
-        await enviarWhatsApp(
+        await enviarHumanizado(
           telefone,
           'Hmm, não identifiquei esse serviço. 🤔\n\n' + textoPedeServico()
         );
@@ -319,7 +368,7 @@ async function processarMensagem(telefone, textoRecebido) {
       estado.etapa = 'concluido';
       salvarEstados();
       salvarLead(telefone, estado);
-      await enviarWhatsApp(
+      await enviarHumanizado(
         telefone,
         textoConfirmacao(estado.nome, estado.endereco, estado.servico)
       );
@@ -328,26 +377,26 @@ async function processarMensagem(telefone, textoRecebido) {
 
     case 'aguardando_nome_app': {
       if (!texto) {
-        await enviarWhatsApp(telefone, 'Não entendi. Qual é o seu *nome*?');
+        await enviarHumanizado(telefone, 'Não entendi. Qual é o seu *nome*?');
         break;
       }
       estado.nome = texto.slice(0, 80);
       estado.etapa = 'aguardando_projeto';
       salvarEstados();
-      await enviarWhatsApp(telefone, textoPedeProjeto(estado.nome));
+      await enviarHumanizado(telefone, textoPedeProjeto(estado.nome));
       break;
     }
 
     case 'aguardando_projeto': {
       if (!texto) {
-        await enviarWhatsApp(telefone, 'Não entendi. Me conta um pouco sobre a sua ideia de *aplicativo ou sistema*?');
+        await enviarHumanizado(telefone, 'Não entendi. Me conta um pouco sobre a sua ideia de *aplicativo ou sistema*?');
         break;
       }
       estado.projeto = texto.slice(0, 500);
       estado.etapa = 'concluido';
       salvarEstados();
       salvarLead(telefone, estado);
-      await enviarWhatsApp(
+      await enviarHumanizado(
         telefone,
         textoConfirmacaoApp(estado.nome, estado.projeto)
       );
@@ -356,7 +405,7 @@ async function processarMensagem(telefone, textoRecebido) {
 
     case 'concluido': {
       // Conversa já finalizada: oferece recomeçar
-      await enviarWhatsApp(
+      await enviarHumanizado(
         telefone,
         'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\n' +
           'Se quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
@@ -366,7 +415,7 @@ async function processarMensagem(telefone, textoRecebido) {
 
     default: {
       resetarEstado(telefone);
-      await enviarWhatsApp(telefone, textoBoasVindas());
+      await enviarHumanizado(telefone, textoBoasVindas());
       estados[telefone].etapa = 'escolhendo_area';
       salvarEstados();
     }
@@ -413,7 +462,7 @@ app.post('/webhook', async (req, res) => {
       const texto = tipo === 'text' ? msg.text?.body : '';
 
       if (tipo !== 'text') {
-        await enviarWhatsApp(
+        await enviarHumanizado(
           telefone,
           'Recebi sua mensagem! 👍 Por enquanto consigo ler só mensagens de *texto*. Pode escrever pra mim?'
         );
@@ -449,5 +498,7 @@ app.listen(PORT, () => {
   if (!VERIFY_TOKEN) console.log('   ⚠️  VERIFY_TOKEN não configurado!');
   if (!WHATSAPP_TOKEN) console.log('   ⚠️  WHATSAPP_TOKEN não configurado (modo teste: mensagens só no log).');
   if (!PHONE_NUMBER_ID) console.log('   ⚠️  PHONE_NUMBER_ID não configurado!');
+  if (!GEMINI_API_KEY) console.log('   ⚠️  GEMINI_API_KEY não configurado (mensagens sem humanização).');
+  else console.log('   ✨ Gemini ativado: mensagens humanizadas.');
   console.log('');
 });
