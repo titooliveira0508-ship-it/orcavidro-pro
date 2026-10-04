@@ -1,13 +1,12 @@
 // ─── OrçaVidro Pro · Bot de WhatsApp (primeiro atendimento) ─────────────────
-// Fluxo: menu (1=vidraçaria, 2=LAA-APPS) → nome → endereço → tipo de serviço → confirmação.
+// Bot conversacional inteligente: o cliente fala livremente, o bot identifica
+// o nicho (vidraçaria ou LAA-APPS) e conduz com mensagens naturais e variadas.
 // O bot NUNCA fala de preços/valores — isso é só com o Tito.
-// As mensagens passam pelo Gemini para um tom mais humano e natural.
 //
 // Variáveis de ambiente (ver server/README.md):
 //   VERIFY_TOKEN    – token de verificação do webhook na Meta
 //   WHATSAPP_TOKEN  – token permanente da API do WhatsApp Cloud
 //   PHONE_NUMBER_ID – ID do número de telefone no WhatsApp Cloud API
-//   GEMINI_API_KEY  – chave da API do Gemini (para humanizar as mensagens)
 //   PORT            – porta do servidor (padrão 3001)
 
 const express = require('express');
@@ -22,7 +21,6 @@ const PORT = process.env.PORT || 3001;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || '';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || '';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 const STATE_FILE = path.join(__dirname, 'state.json');
 const LEADS_FILE = path.join(__dirname, 'leads.json');
@@ -116,141 +114,96 @@ async function enviarWhatsApp(para, texto) {
   }
 }
 
-// ─── IA conversacional via Gemini ───────────────────────────────────────────
-// O bot é 100% conduzido pela IA: o cliente fala livremente o que precisa,
-// a IA identifica o nicho (vidraçaria ou apps) e conduz a conversa.
-// Quando tiver todos os dados, a IA sinaliza com um bloco JSON [LEAD].
-// Se o Gemini falhar, usa mensagens simples de fallback.
+// ─── Bot conversacional inteligente (sem dependência externa) ───────────────
+// O cliente fala livremente; o bot identifica o nicho por palavras-chave
+// e conduz a conversa com mensagens naturais e VARIADAS (não repete).
+// Regras duras: nunca fala de preços, nunca inventa serviços.
 
-const SYSTEM_PROMPT = `Você é o atendente virtual de WhatsApp de dois negócios do Tito:
-
-1. 🪟 M. OLIVEIRA ENVIDRAÇAMENTOS (vidraçaria no RJ) — trabalha SOMENTE com vidro temperado/blindex: box (frontal, de abrir, de canto, flex), janelas, portas de correr, porta pivotante, espelhos, armário de pia, guarda-corpo, cortina de vidro, báscula. NUNCA esquadrias de alumínio.
-
-2. 📱 LAA-APPS — desenvolvimento de aplicativos e sistemas sob encomenda.
-
-COMO CONVERSAR:
-- Seja caloroso, natural e humano, como uma pessoa real no WhatsApp. Português brasileiro informal.
-- Use 1-2 emojis por mensagem, sem exagero. Mensagens curtas (estilo WhatsApp).
-- LEIA O HISTÓRICO com atenção: NUNCA repita uma pergunta que já foi feita. NUNCA peça de novo um dado que o cliente já deu.
-- Varie as frases: cada resposta deve soar fresca, nunca copie e cole a mesma mensagem.
-- Deixe o cliente falar livremente. Identifique sozinho se é vidraçaria ou app pela mensagem dele.
-- Se não der pra identificar, pergunte de forma natural: "me conta, é sobre vidro/box ou sobre aplicativo/sistema?"
-- Para VIDRAÇARIA, colete: nome da pessoa, endereço (rua, número, bairro) e tipo de serviço.
-- Para LAA-APPS, colete: nome da pessoa e descrição da ideia do app/sistema.
-- Faça UMA pergunta por vez, com naturalidade. Não interrogue de forma robótica.
-- Se o cliente mandar algo fora do contexto (ex.: "oi", "bom dia"), responda com simpatia e retome de onde parou, sem recomeçar do zero.
-
-REGRAS DURAS (nunca quebre):
-- NUNCA informe preços, valores, orçamentos ou tabelas. Se perguntarem, diga que cada orçamento é personalizado e o Tito vai passar.
-- NUNCA invente serviços que não existem na lista da vidraçaria.
-- NUNCA diga que você é o Tito. Você é o assistente virtual.
-
-QUANDO TIVER TODOS OS DADOS:
-- Agradeça e confirme os dados de forma resumida.
-- Diga que o responsável vai entrar em contato em breve.
-- No FINAL da sua resposta, em linha separada, inclua EXATAMENTE este bloco (preencha os campos):
-[LEAD]
-{"area":"vidracaria ou laaapps","nome":"...","endereco":"...","servico":"...","projeto":"..."}
-[/LEAD]
-- Para vidraçaria preencha nome, endereco e servico (projeto vazio ""). Para apps preencha nome e projeto (endereco e servico vazios "").`;
-
-// Histórico de conversa por telefone (últimas 20 mensagens)
-function getHistorico(telefone) {
-  const estado = getEstado(telefone);
-  if (!estado.historico) estado.historico = [];
-  return estado.historico;
-}
-
-function adicionarHistorico(telefone, papel, texto) {
-  const hist = getHistorico(telefone);
-  hist.push({ papel, texto: (texto || '').slice(0, 1000) });
-  if (hist.length > 20) hist.splice(0, hist.length - 20);
-  salvarEstados();
-}
-
-// Extrai o bloco [LEAD]...[/LEAD] da resposta da IA
-function extrairLead(resposta) {
-  const match = resposta.match(/\[LEAD\]\s*(\{[\s\S]*?\})\s*\[\/LEAD\]/);
-  if (!match) return null;
-  try {
-    const dados = JSON.parse(match[1]);
-    if (!dados.nome) return null;
-    return dados;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Remove o bloco [LEAD] da mensagem antes de enviar ao cliente
-function limparResposta(resposta) {
-  return resposta.replace(/\[LEAD\][\s\S]*?\[\/LEAD\]/g, '').trim();
-}
-
-// Gera a resposta da IA com base no histórico
-async function responderComIA(telefone, textoCliente) {
-  if (!GEMINI_API_KEY) return null;
-  try {
-    const hist = getHistorico(telefone);
-    const conversa = hist.map((h) =>
-      h.papel === 'cliente' ? `Cliente: ${h.texto}` : `Atendente: ${h.texto}`
-    ).join('\n');
-
-    const prompt = SYSTEM_PROMPT +
-      '\n\n--- HISTÓRICO DA CONVERSA ---\n' + (conversa || '(início da conversa)') +
-      '\n\nCliente: ' + textoCliente +
-      '\nAtendente:';
-
-    const resp = await axios.post(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 600, temperature: 0.8 },
-      },
-      { timeout: 20000 }
-    );
-    const texto = resp.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return texto || null;
-  } catch (e) {
-    const status = e.response?.status;
-    const detalhe = e.response?.data?.error?.message || e.message;
-    console.log(`⚠️  Gemini indisponível: HTTP ${status} → ${detalhe}`);
-    return null;
-  }
-}
-
-// Mensagens simples de fallback (se a IA estiver fora do ar) — variadas pra não repetir
-const FALLBACKS_CONTINUA = [
-  'Entendi! 👍 Me conta mais um pouquinho pra eu te ajudar melhor.',
-  'Beleza! 😊 E o que mais você pode me contar sobre o que precisa?',
-  'Certo! Tô anotando aqui 📝. Me fala mais detalhes?',
-  'Show! 👍 Continua que tô te ouvindo.',
+// Palavras que indicam vidraçaria
+const PALAVRAS_VIDRACARIA = [
+  'vidro', 'blindex', 'box', 'espelho', 'janela', 'porta', 'banheiro',
+  'sacada', 'cortina', 'guarda-corpo', 'guardacorpo', 'bascula', 'báscula',
+  'pia', 'armario', 'armário', 'pivotante', 'correr', 'abrir', 'canto',
+  'temperado', 'fumê', 'fume', 'verde', 'incolor', 'envidraça', 'vidraça',
 ];
-function textoFallbackContinua(telefone) {
+// Palavras que indicam LAA-APPS
+const PALAVRAS_APPS = [
+  'app', 'aplicativo', 'sistema', 'site', 'software', 'programa', 'plataforma',
+  'loja virtual', 'ecommerce', 'e-commerce', 'agendamento', 'delivery',
+];
+
+// Mensagens variadas — o bot alterna pra nunca soar robótico
+const MSGS = {
+  boasVindas: [
+    'Olá! 👋 Bem-vindo(a)! Sou o assistente virtual. Me conta o que você precisa — pode falar livremente! 😊',
+    'Oi! 👋 Que bom te ver por aqui! Sou o assistente virtual. Me diz como posso te ajudar hoje? 😊',
+    'Olá! 👋 Sou o assistente virtual. Pode me contar o que você tá precisando? Tô aqui pra ajudar! 😊',
+  ],
+  pedeNome: [
+    'Prazer! 😊 Qual é o seu *nome*?',
+    'Que legal! E qual é o seu *nome* pra eu te chamar direitinho? 😊',
+    'Perfeito! Me diz seu *nome* pra gente continuar? 😊',
+  ],
+  pedeEndereco: [
+    'Qual é o seu *endereço* (rua, número e bairro)? 📍',
+    'E onde fica? Me passa seu *endereço* (rua, número e bairro) 📍',
+    'Beleza! Agora me diz o *endereço* onde vai ser o serviço 📍',
+  ],
+  pedeServico: [
+    'E qual *serviço* você precisa? Pode falar com suas palavras — ex.: box pro banheiro, janela, espelho... 🪟',
+    'Me conta: o que você precisa fazer? Tipo box, janela, porta de vidro, espelho... 🪟',
+    'Qual trabalho você quer fazer? Descreve pra mim — box, espelho, janela, porta... 🪟',
+  ],
+  pedeProjeto: [
+    'Que massa! 💡 Me conta mais sobre sua ideia — que tipo de aplicativo ou sistema você imagina?',
+    'Adoro uma ideia nova! 💡 Descreve pra mim o app ou sistema que você tá pensando.',
+    'Show! 💡 Me fala mais detalhes da sua ideia de aplicativo ou sistema.',
+  ],
+  preco: [
+    'Sobre valores, cada orçamento aqui é *personalizado* de acordo com as medidas e o projeto 📐. O Tito vai analisar e te passar certinho, tá bom? 😉',
+    'Boa pergunta! 😊 Mas os valores dependem das medidas e do projeto — o Tito monta um orçamento personalizado pra você. Pode continuar me contando o que precisa! 📐',
+  ],
+  naoEntendi: [
+    'Hmm, não entendi muito bem 🤔. Pode me explicar de outro jeito?',
+    'Ops, me perdi aqui 😅. Me conta de novo com outras palavras?',
+  ],
+  confirmaVidracaria: [
+    'Fechado! ✅ Anotei tudo aqui.\n\nA *M. Oliveira Envidraçamentos* vai entrar em contato com você em breve. Obrigado! 🙏',
+    'Prontinho! ✅ Seus dados já estão com a gente.\n\nA *M. Oliveira Envidraçamentos* te chama em breve. Valeu pelo contato! 🙏',
+  ],
+  confirmaApp: [
+    'Fechado! ✅ Anotei sua ideia aqui.\n\nA *LAA-APPS* vai entrar em contato com você em breve. Obrigado! 🙏',
+    'Prontinho! ✅ Sua ideia já tá registrada.\n\nA *LAA-APPS* te chama em breve pra conversar sobre o projeto. Valeu! 🙏',
+  ],
+  perguntaNicho: [
+    'Me conta: é sobre *vidro/box/espelho* 🪟 ou sobre *aplicativo/sistema* 📱?',
+    'Só pra eu te direcionar certinho: você precisa de algo pra *vidraçaria* 🪟 ou de um *app/sistema* 📱?',
+  ],
+  continua: [
+    'Entendi! 👍 Me conta mais um pouco pra eu te ajudar melhor.',
+    'Beleza! 😊 E o que mais você pode me dizer?',
+    'Tô anotando aqui 📝. Me fala mais detalhes?',
+  ],
+};
+
+// Retorna uma mensagem variada (alterna o índice por telefone pra não repetir)
+function msgVariada(telefone, lista) {
   const estado = getEstado(telefone);
-  const i = (estado.fallbackIdx || 0) % FALLBACKS_CONTINUA.length;
-  estado.fallbackIdx = (estado.fallbackIdx || 0) + 1;
+  const chave = '_msgIdx';
+  const i = (estado[chave] || 0) % lista.length;
+  estado[chave] = (estado[chave] || 0) + 1;
   salvarEstados();
-  return FALLBACKS_CONTINUA[i];
+  return lista[i];
 }
 
-function textoFallbackBoasVindas() {
-  return (
-    'Olá! 👋 Bem-vindo(a)!\n\n' +
-    'Sou o assistente virtual. Me conta o que você precisa — pode falar livremente! 😊'
-  );
-}
-
-// Anti-duplicação: ignora a mesma mensagem se chegar repetida em <30s (retry da Meta)
-function mensagemDuplicada(telefone, texto) {
-  const estado = getEstado(telefone);
-  const agora = Date.now();
-  if (estado.ultimaMsg === texto && agora - (estado.ultimaMsgTs || 0) < 30000) {
-    return true;
-  }
-  estado.ultimaMsg = texto;
-  estado.ultimaMsgTs = agora;
-  salvarEstados();
-  return false;
+function detectarNicho(texto) {
+  const t = texto.toLowerCase();
+  const ehVidro = PALAVRAS_VIDRACARIA.some((p) => t.includes(p));
+  const ehApp = PALAVRAS_APPS.some((p) => t.includes(p));
+  if (ehVidro && !ehApp) return 'vidracaria';
+  if (ehApp && !ehVidro) return 'laaapps';
+  if (ehVidro && ehApp) return 'ambos';
+  return null;
 }
 
 // ─── Textos do bot (pt-BR) ──────────────────────────────────────────────────
@@ -360,76 +313,196 @@ function salvarLead(telefone, dados) {
   console.log('');
 }
 
-// ─── Processamento da mensagem (100% IA) ────────────────────────────────────
+// ─── Processamento inteligente da conversa ──────────────────────────────────
+// O cliente fala livremente; o bot detecta o nicho e conduz com mensagens variadas.
 async function processarMensagem(telefone, textoRecebido) {
   const texto = (textoRecebido || '').trim();
   const estado = getEstado(telefone);
 
   // Ignora mensagem duplicada (retry da Meta em <30s)
-  if (texto && mensagemDuplicada(telefone, texto)) {
-    console.log(`🔁 Mensagem duplicada ignorada de ${telefone}: ${texto.slice(0, 50)}`);
+  if (texto && typeof mensagemDuplicada === 'function' && mensagemDuplicada(telefone, texto)) {
+    console.log(`🔁 Mensagem duplicada ignorada de ${telefone}`);
     return;
   }
 
   // Comandos de reinício
   if (/^(cancelar|recomeçar|recomecar|reiniciar|menu)$/i.test(texto)) {
     resetarEstado(telefone);
-    adicionarHistorico(telefone, 'atendente', textoFallbackBoasVindas());
-    await enviarWhatsApp(telefone, textoFallbackBoasVindas());
-    return;
-  }
-
-  // Se a conversa já foi concluída e a pessoa continua falando: oferece recomeçar
-  // (a IA também lida com isso, mas garantimos uma resposta mesmo sem Gemini)
-  if (estado.etapa === 'concluido' && !GEMINI_API_KEY) {
-    await enviarWhatsApp(
-      telefone,
-      'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\n' +
-        'Se quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
-    );
-    return;
-  }
-
-  // Registra a mensagem do cliente no histórico
-  adicionarHistorico(telefone, 'cliente', texto);
-
-  // Tenta responder com a IA
-  const respostaIA = await responderComIA(telefone, texto);
-
-  if (!respostaIA) {
-    // Fallback: sem Gemini, usa mensagens variadas (não repete a mesma)
-    const hist = getHistorico(telefone);
-    const fallback = estado.etapa === 'inicio' || hist.length <= 1
-      ? textoFallbackBoasVindas()
-      : textoFallbackContinua(telefone);
-    adicionarHistorico(telefone, 'atendente', fallback);
-    await enviarWhatsApp(telefone, fallback);
-    if (estado.etapa === 'inicio') estado.etapa = 'conversando';
+    await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.boasVindas));
+    estado.etapa = 'ouvindo';
     salvarEstados();
     return;
   }
 
-  // Verifica se a IA concluiu o lead
-  const lead = extrairLead(respostaIA);
-  const textoLimpo = limparResposta(respostaIA);
-
-  adicionarHistorico(telefone, 'atendente', textoLimpo);
-  if (textoLimpo) {
-    await enviarWhatsApp(telefone, textoLimpo);
+  // Pergunta de preço: responde sem valores, sem quebrar o fluxo
+  if (texto && perguntaPreco(texto) && estado.etapa !== 'concluido') {
+    await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.preco));
+    // Reenvia a pergunta atual
+    const rep = {
+      vid_nome: MSGS.pedeNome, app_nome: MSGS.pedeNome,
+      vid_endereco: MSGS.pedeEndereco, vid_servico: MSGS.pedeServico,
+      app_projeto: MSGS.pedeProjeto, perguntando_nicho: MSGS.perguntaNicho,
+    }[estado.etapa];
+    if (rep) await enviarWhatsApp(telefone, msgVariada(telefone, rep));
+    else if (estado.etapa === 'inicio' || estado.etapa === 'ouvindo') {
+      await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.boasVindas));
+      estado.etapa = 'ouvindo';
+      salvarEstados();
+    }
+    return;
   }
 
-  if (lead) {
-    estado.etapa = 'concluido';
-    estado.area = lead.area;
-    estado.nome = lead.nome || '';
-    estado.endereco = lead.endereco || '';
-    estado.servico = lead.servico || '';
-    estado.projeto = lead.projeto || '';
-    salvarEstados();
-    salvarLead(telefone, estado);
-  } else if (estado.etapa === 'inicio') {
-    estado.etapa = 'conversando';
-    salvarEstados();
+  switch (estado.etapa) {
+    case 'inicio': {
+      await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.boasVindas));
+      estado.etapa = 'ouvindo';
+      salvarEstados();
+      break;
+    }
+
+    case 'ouvindo': {
+      // Cliente falou livremente: tenta identificar o nicho
+      const nicho = detectarNicho(texto);
+      if (nicho === 'vidracaria') {
+        estado.area = 'vidracaria';
+        estado.etapa = 'vid_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Que bom! 🪟 ' + msgVariada(telefone, MSGS.pedeNome));
+      } else if (nicho === 'laaapps') {
+        estado.area = 'laaapps';
+        estado.etapa = 'app_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Que massa! 📱 ' + msgVariada(telefone, MSGS.pedeNome));
+      } else {
+        estado.etapa = 'perguntando_nicho';
+        salvarEstados();
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.perguntaNicho));
+      }
+      break;
+    }
+
+    case 'perguntando_nicho': {
+      const nicho = detectarNicho(texto);
+      const t = texto.toLowerCase();
+      if (nicho === 'vidracaria' || t === '1' || t.includes('vidro')) {
+        estado.area = 'vidracaria';
+        estado.etapa = 'vid_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Fechado! 🪟 ' + msgVariada(telefone, MSGS.pedeNome));
+      } else if (nicho === 'laaapps' || t === '2' || t.includes('app') || t.includes('sistema')) {
+        estado.area = 'laaapps';
+        estado.etapa = 'app_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Fechado! 📱 ' + msgVariada(telefone, MSGS.pedeNome));
+      } else {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.perguntaNicho));
+      }
+      break;
+    }
+
+    case 'vid_nome': {
+      if (!texto || texto.length < 2) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeNome));
+        break;
+      }
+      estado.nome = texto.slice(0, 80);
+      estado.etapa = 'vid_endereco';
+      salvarEstados();
+      await enviarWhatsApp(telefone, `Prazer, ${estado.nome}! 😊 ` + msgVariada(telefone, MSGS.pedeEndereco));
+      break;
+    }
+
+    case 'vid_endereco': {
+      if (!texto || texto.length < 3) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeEndereco));
+        break;
+      }
+      estado.endereco = texto.slice(0, 200);
+      // Tenta já identificar o serviço na mesma mensagem (ex.: "preciso de box, moro na rua X")
+      const serv = identificarServico(texto);
+      if (serv) {
+        estado.servico = serv;
+        estado.etapa = 'concluido';
+        salvarEstados();
+        salvarLead(telefone, estado);
+        await enviarWhatsApp(
+          telefone,
+          `✅ *Dados confirmados!*\n\n👤 ${estado.nome}\n📍 ${estado.endereco}\n🔧 ${serv}\n\n` +
+          msgVariada(telefone, MSGS.confirmaVidracaria)
+        );
+      } else {
+        estado.etapa = 'vid_servico';
+        salvarEstados();
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeServico));
+      }
+      break;
+    }
+
+    case 'vid_servico': {
+      const serv = identificarServico(texto);
+      if (serv) {
+        estado.servico = serv;
+      } else if (texto && texto.length >= 3) {
+        // Aceita descrição livre do serviço
+        estado.servico = texto.slice(0, 120);
+      } else {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.naoEntendi) + '\n\n' + msgVariada(telefone, MSGS.pedeServico));
+        break;
+      }
+      estado.etapa = 'concluido';
+      salvarEstados();
+      salvarLead(telefone, estado);
+      await enviarWhatsApp(
+        telefone,
+        `✅ *Dados confirmados!*\n\n👤 ${estado.nome}\n📍 ${estado.endereco}\n🔧 ${estado.servico}\n\n` +
+        msgVariada(telefone, MSGS.confirmaVidracaria)
+      );
+      break;
+    }
+
+    case 'app_nome': {
+      if (!texto || texto.length < 2) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeNome));
+        break;
+      }
+      estado.nome = texto.slice(0, 80);
+      estado.etapa = 'app_projeto';
+      salvarEstados();
+      await enviarWhatsApp(telefone, `Prazer, ${estado.nome}! 😊 ` + msgVariada(telefone, MSGS.pedeProjeto));
+      break;
+    }
+
+    case 'app_projeto': {
+      if (!texto || texto.length < 3) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeProjeto));
+        break;
+      }
+      estado.projeto = texto.slice(0, 500);
+      estado.etapa = 'concluido';
+      salvarEstados();
+      salvarLead(telefone, estado);
+      await enviarWhatsApp(
+        telefone,
+        `✅ *Dados confirmados!*\n\n👤 ${estado.nome}\n💡 ${estado.projeto}\n\n` +
+        msgVariada(telefone, MSGS.confirmaApp)
+      );
+      break;
+    }
+
+    case 'concluido': {
+      await enviarWhatsApp(
+        telefone,
+        'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\nSe quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
+      );
+      break;
+    }
+
+    default: {
+      resetarEstado(telefone);
+      await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.boasVindas));
+      estado.etapa = 'ouvindo';
+      salvarEstados();
+    }
   }
 }
 
@@ -509,7 +582,6 @@ app.listen(PORT, () => {
   if (!VERIFY_TOKEN) console.log('   ⚠️  VERIFY_TOKEN não configurado!');
   if (!WHATSAPP_TOKEN) console.log('   ⚠️  WHATSAPP_TOKEN não configurado (modo teste: mensagens só no log).');
   if (!PHONE_NUMBER_ID) console.log('   ⚠️  PHONE_NUMBER_ID não configurado!');
-  if (!GEMINI_API_KEY) console.log('   ⚠️  GEMINI_API_KEY não configurado (mensagens sem humanização).');
-  else console.log('   ✨ Gemini ativado: mensagens humanizadas.');
+  console.log('   💬 Bot conversacional inteligente ativo.');
   console.log('');
 });
