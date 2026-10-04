@@ -24,7 +24,7 @@ const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || '';
 const STATE_FILE = path.join(__dirname, 'state.json');
 const LEADS_FILE = path.join(__dirname, 'leads.json');
 
-// ─── As 10 categorias de serviço (igual ao app) ─────────────────────────────
+// ─── As 12 categorias de serviço (igual ao app) ─────────────────────────────
 const SERVICOS = [
   'Box Frontal',
   'Box de Abrir',
@@ -36,6 +36,8 @@ const SERVICOS = [
   'Armário de Pia',
   'Guarda-Corpo',
   'Cortina de Vidro',
+  'Báscula',
+  'Box Flex/Articulado',
 ];
 
 // Palavras que indicam que o cliente está perguntando de preço.
@@ -48,7 +50,8 @@ const PALAVRAS_PRECO = [
 ];
 
 // ─── Estado da conversa (por telefone) ──────────────────────────────────────
-// estados: inicio → aguardando_nome → aguardando_endereco → aguardando_servico → concluido
+// estados: inicio → escolhendo_area → (vidraçaria: aguardando_nome → aguardando_endereco → aguardando_servico → concluido)
+//                                → (laa-apps: aguardando_nome_app → aguardando_projeto → concluido)
 let estados = {};
 try {
   if (fs.existsSync(STATE_FILE)) {
@@ -68,13 +71,13 @@ function salvarEstados() {
 
 function getEstado(telefone) {
   if (!estados[telefone]) {
-    estados[telefone] = { etapa: 'inicio', nome: '', endereco: '', servico: '' };
+    estados[telefone] = { etapa: 'inicio', area: '', nome: '', endereco: '', servico: '', projeto: '' };
   }
   return estados[telefone];
 }
 
 function resetarEstado(telefone) {
-  estados[telefone] = { etapa: 'inicio', nome: '', endereco: '', servico: '' };
+  estados[telefone] = { etapa: 'inicio', area: '', nome: '', endereco: '', servico: '', projeto: '' };
   salvarEstados();
 }
 
@@ -113,9 +116,10 @@ async function enviarWhatsApp(para, texto) {
 // ─── Textos do bot (pt-BR) ──────────────────────────────────────────────────
 function textoBoasVindas() {
   return (
-    'Olá! 👋 Bem-vindo(a) à *M. Oliveira Envidraçamentos*! 🪟\n\n' +
-    'Sou o assistente virtual e vou te ajudar com o primeiro atendimento.\n\n' +
-    'Qual é o seu *nome*?'
+    'Olá! 👋 Bem-vindo(a)!\n\n' +
+    'Sou o assistente virtual. Com o que posso te ajudar?\n\n' +
+    'Digite *1* para 🪟 *M. Oliveira Envidraçamentos* (vidros, boxes, espelhos)\n' +
+    'Digite *2* para 📱 *LAA-APPS* (aplicativos e sistemas)'
   );
 }
 
@@ -139,6 +143,23 @@ function textoConfirmacao(nome, endereco, servico) {
     `📍 Endereço: ${endereco}\n` +
     `🔧 Serviço: ${servico}\n\n` +
     'A *M. Oliveira Envidraçamentos* vai entrar em contato com você em breve com o orçamento. Obrigado pelo contato! 🙏'
+  );
+}
+
+function textoPedeProjeto(nome) {
+  return (
+    `Prazer, ${nome}! 😊\n\n` +
+    'Me conta um pouco sobre a sua ideia: que tipo de *aplicativo ou sistema* você precisa? 📱💻\n\n' +
+    'Pode descrever com suas palavras — ex.: "um app pra minha loja", "um sistema de agendamento", etc.'
+  );
+}
+
+function textoConfirmacaoApp(nome, projeto) {
+  return (
+    '✅ *Dados confirmados!*\n\n' +
+    `👤 Nome: ${nome}\n` +
+    `💡 Projeto: ${projeto}\n\n` +
+    'A *LAA-APPS* vai entrar em contato com você em breve. Obrigado pelo contato! 🙏'
   );
 }
 
@@ -170,8 +191,10 @@ function salvarLead(telefone, dados) {
   const lead = {
     nome: dados.nome,
     telefone,
-    endereco: dados.endereco,
-    servico: dados.servico,
+    area: dados.area === 'laaapps' ? 'LAA-APPS' : 'M. Oliveira Envidraçamentos',
+    endereco: dados.endereco || '',
+    servico: dados.servico || '',
+    projeto: dados.projeto || '',
     data: new Date().toISOString(),
   };
   let leads = [];
@@ -188,8 +211,10 @@ function salvarLead(telefone, dados) {
   console.log('🔔 NOVO LEAD RECEBIDO!');
   console.log('   👤 Nome:    ', lead.nome);
   console.log('   📞 Telefone:', lead.telefone);
-  console.log('   📍 Endereço:', lead.endereco);
-  console.log('   🔧 Serviço: ', lead.servico);
+  console.log('   🏢 Área:    ', lead.area);
+  if (lead.endereco) console.log('   📍 Endereço:', lead.endereco);
+  if (lead.servico) console.log('   🔧 Serviço: ', lead.servico);
+  if (lead.projeto) console.log('   💡 Projeto: ', lead.projeto);
   console.log('   📅 Data:    ', lead.data);
   console.log('═══════════════════════════════════════');
   console.log('');
@@ -211,7 +236,7 @@ async function processarMensagem(telefone, textoRecebido) {
 
   // Se perguntou de preço em qualquer etapa: responde sem passar valores
   // (mas não interrompe o fluxo — continua de onde parou)
-  if (texto && perguntaPreco(texto) && estado.etapa !== 'concluido') {
+  if (texto && perguntaPreco(texto) && estado.etapa !== 'concluido' && estado.area === 'vidracaria') {
     await enviarWhatsApp(telefone, textoPreco());
     // Reenvia a pergunta atual para não travar a conversa
     if (estado.etapa === 'aguardando_nome') {
@@ -222,7 +247,7 @@ async function processarMensagem(telefone, textoRecebido) {
       await enviarWhatsApp(telefone, textoPedeServico());
     } else {
       await enviarWhatsApp(telefone, textoBoasVindas());
-      estado.etapa = 'aguardando_nome';
+      estado.etapa = 'escolhendo_area';
       salvarEstados();
     }
     return;
@@ -231,8 +256,29 @@ async function processarMensagem(telefone, textoRecebido) {
   switch (estado.etapa) {
     case 'inicio': {
       await enviarWhatsApp(telefone, textoBoasVindas());
-      estado.etapa = 'aguardando_nome';
+      estado.etapa = 'escolhendo_area';
       salvarEstados();
+      break;
+    }
+
+    case 'escolhendo_area': {
+      const t = texto.toLowerCase();
+      if (t === '1' || t.includes('vidro') || t.includes('envidra') || t.includes('oliveira')) {
+        estado.area = 'vidracaria';
+        estado.etapa = 'aguardando_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Ótimo! 🪟 Vamos falar de *envidraçamento*.\n\nQual é o seu *nome*?');
+      } else if (t === '2' || t.includes('app') || t.includes('sistema') || t.includes('laa')) {
+        estado.area = 'laaapps';
+        estado.etapa = 'aguardando_nome_app';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Ótimo! 📱 Vamos falar de *aplicativos e sistemas*.\n\nQual é o seu *nome*?');
+      } else {
+        await enviarWhatsApp(
+          telefone,
+          'Não entendi. 🤔\n\nDigite *1* para 🪟 *M. Oliveira Envidraçamentos*\nDigite *2* para 📱 *LAA-APPS*'
+        );
+      }
       break;
     }
 
@@ -280,11 +326,39 @@ async function processarMensagem(telefone, textoRecebido) {
       break;
     }
 
+    case 'aguardando_nome_app': {
+      if (!texto) {
+        await enviarWhatsApp(telefone, 'Não entendi. Qual é o seu *nome*?');
+        break;
+      }
+      estado.nome = texto.slice(0, 80);
+      estado.etapa = 'aguardando_projeto';
+      salvarEstados();
+      await enviarWhatsApp(telefone, textoPedeProjeto(estado.nome));
+      break;
+    }
+
+    case 'aguardando_projeto': {
+      if (!texto) {
+        await enviarWhatsApp(telefone, 'Não entendi. Me conta um pouco sobre a sua ideia de *aplicativo ou sistema*?');
+        break;
+      }
+      estado.projeto = texto.slice(0, 500);
+      estado.etapa = 'concluido';
+      salvarEstados();
+      salvarLead(telefone, estado);
+      await enviarWhatsApp(
+        telefone,
+        textoConfirmacaoApp(estado.nome, estado.projeto)
+      );
+      break;
+    }
+
     case 'concluido': {
       // Conversa já finalizada: oferece recomeçar
       await enviarWhatsApp(
         telefone,
-        'Seu pedido já está com a gente! ✅ O Tito entra em contato em breve.\n\n' +
+        'Seu pedido já está com a gente! ✅ Entraremos em contato em breve.\n\n' +
           'Se quiser fazer um *novo* pedido, é só escrever *recomeçar*.'
       );
       break;
@@ -293,7 +367,7 @@ async function processarMensagem(telefone, textoRecebido) {
     default: {
       resetarEstado(telefone);
       await enviarWhatsApp(telefone, textoBoasVindas());
-      estados[telefone].etapa = 'aguardando_nome';
+      estados[telefone].etapa = 'escolhendo_area';
       salvarEstados();
     }
   }
