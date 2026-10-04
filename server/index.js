@@ -132,57 +132,63 @@ const PALAVRAS_APPS = [
   'loja virtual', 'ecommerce', 'e-commerce', 'agendamento', 'delivery',
 ];
 
-// Mensagens variadas — o bot alterna pra nunca soar robótico
+// Mensagens naturais estilo WhatsApp — curtas, casuais, como gente de verdade fala
 const MSGS = {
   boasVindas: [
-    'Olá! 👋 Bem-vindo(a)! Sou o assistente virtual. Me conta o que você precisa — pode falar livremente! 😊',
-    'Oi! 👋 Que bom te ver por aqui! Sou o assistente virtual. Me diz como posso te ajudar hoje? 😊',
-    'Olá! 👋 Sou o assistente virtual. Pode me contar o que você tá precisando? Tô aqui pra ajudar! 😊',
+    'Opa! 👋 Tudo bem? Sou o assistente aqui. Me fala o que cê precisa!',
+    'Oi! 👋 Beleza? Me conta aí o que você tá precisando 😊',
+    'Fala aí! 👋 Sou o assistente. O que cê quer fazer?',
   ],
   pedeNome: [
-    'Prazer! 😊 Qual é o seu *nome*?',
-    'Que legal! E qual é o seu *nome* pra eu te chamar direitinho? 😊',
-    'Perfeito! Me diz seu *nome* pra gente continuar? 😊',
+    'Como cê se chama? 😊',
+    'Qual seu nome? 😊',
+    'Me fala seu nome aí 😊',
   ],
   pedeEndereco: [
-    'Qual é o seu *endereço* (rua, número e bairro)? 📍',
-    'E onde fica? Me passa seu *endereço* (rua, número e bairro) 📍',
-    'Beleza! Agora me diz o *endereço* onde vai ser o serviço 📍',
+    'E o endereço? Rua, número e bairro 📍',
+    'Onde que é? Me passa o endereço 📍',
+    'Qual o endereço lá? 📍',
   ],
   pedeServico: [
-    'E qual *serviço* você precisa? Pode falar com suas palavras — ex.: box pro banheiro, janela, espelho... 🪟',
-    'Me conta: o que você precisa fazer? Tipo box, janela, porta de vidro, espelho... 🪟',
-    'Qual trabalho você quer fazer? Descreve pra mim — box, espelho, janela, porta... 🪟',
+    'O que cê quer fazer? Pode falar do seu jeito 🪟',
+    'Me conta o que precisa — box, janela, espelho... 🪟',
+    'Qual o serviço? Fala aí com suas palavras 🪟',
   ],
   pedeProjeto: [
-    'Que massa! 💡 Me conta mais sobre sua ideia — que tipo de aplicativo ou sistema você imagina?',
-    'Adoro uma ideia nova! 💡 Descreve pra mim o app ou sistema que você tá pensando.',
-    'Show! 💡 Me fala mais detalhes da sua ideia de aplicativo ou sistema.',
+    'Que ideia massa! 💡 Me conta mais — o que esse app/sistema faria?',
+    'Opa, curti! 💡 Descreve aí sua ideia pra mim.',
+    'Boa! 💡 Me fala mais sobre o que cê tá imaginando.',
   ],
   preco: [
-    'Sobre valores, cada orçamento aqui é *personalizado* de acordo com as medidas e o projeto 📐. O Tito vai analisar e te passar certinho, tá bom? 😉',
-    'Boa pergunta! 😊 Mas os valores dependem das medidas e do projeto — o Tito monta um orçamento personalizado pra você. Pode continuar me contando o que precisa! 📐',
+    'Então, preço depende das medidas e do projeto 📐 O Tito monta um orçamento certinho pra você. Mas me conta o resto que eu já anoto tudo!',
+    'Valor a gente só passa com as medidas em mãos, tá? 📐 O Tito te manda o orçamento personalizado. Continua me contando!',
   ],
   naoEntendi: [
-    'Hmm, não entendi muito bem 🤔. Pode me explicar de outro jeito?',
-    'Ops, me perdi aqui 😅. Me conta de novo com outras palavras?',
+    'Hmm, não saquei 🤔 Fala de outro jeito pra mim?',
+    'Ih, me perdi 😅 Tenta explicar diferente?',
   ],
   confirmaVidracaria: [
-    'Fechado! ✅ Anotei tudo aqui.\n\nA *M. Oliveira Envidraçamentos* vai entrar em contato com você em breve. Obrigado! 🙏',
-    'Prontinho! ✅ Seus dados já estão com a gente.\n\nA *M. Oliveira Envidraçamentos* te chama em breve. Valeu pelo contato! 🙏',
+    'Fechou! ✅ Já anotei tudo.\n\nA *M. Oliveira Envidraçamentos* te chama em breve. Valeu! 🙏',
+    'Pronto! ✅ Tá tudo anotado.\n\nA *M. Oliveira Envidraçamentos* entra em contato já já. Obrigado! 🙏',
   ],
   confirmaApp: [
-    'Fechado! ✅ Anotei sua ideia aqui.\n\nA *LAA-APPS* vai entrar em contato com você em breve. Obrigado! 🙏',
-    'Prontinho! ✅ Sua ideia já tá registrada.\n\nA *LAA-APPS* te chama em breve pra conversar sobre o projeto. Valeu! 🙏',
+    'Fechou! ✅ Ideia anotada.\n\nA *LAA-APPS* te chama em breve. Valeu! 🙏',
+    'Show! ✅ Já registrei tudo.\n\nA *LAA-APPS* entra em contato pra conversar do projeto. Obrigado! 🙏',
   ],
   perguntaNicho: [
-    'Me conta: é sobre *vidro/box/espelho* 🪟 ou sobre *aplicativo/sistema* 📱?',
-    'Só pra eu te direcionar certinho: você precisa de algo pra *vidraçaria* 🪟 ou de um *app/sistema* 📱?',
+    'É sobre vidro/box 🪟 ou sobre app/sistema 📱?',
+    'Me diz: vidraçaria 🪟 ou aplicativo 📱?',
   ],
-  continua: [
-    'Entendi! 👍 Me conta mais um pouco pra eu te ajudar melhor.',
-    'Beleza! 😊 E o que mais você pode me dizer?',
-    'Tô anotando aqui 📝. Me fala mais detalhes?',
+  // Reações que ecoam o que a pessoa disse (parece que tá ouvindo de verdade)
+  reacaoVidro: [
+    'Ah, vidro! 🪟 Boa!',
+    'Saquei, é de vidraçaria! 🪟',
+    'Opa, parte de vidros! 🪟 Show!',
+  ],
+  reacaoApp: [
+    'Ah, aplicativo! 📱 Massa!',
+    'Saquei, é app/sistema! 📱 Boa!',
+    'Opa, parte de tecnologia! 📱 Curti!',
   ],
 };
 
@@ -367,12 +373,12 @@ async function processarMensagem(telefone, textoRecebido) {
         estado.area = 'vidracaria';
         estado.etapa = 'vid_nome';
         salvarEstados();
-        await enviarWhatsApp(telefone, 'Que bom! 🪟 ' + msgVariada(telefone, MSGS.pedeNome));
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.reacaoVidro) + ' ' + msgVariada(telefone, MSGS.pedeNome));
       } else if (nicho === 'laaapps') {
         estado.area = 'laaapps';
         estado.etapa = 'app_nome';
         salvarEstados();
-        await enviarWhatsApp(telefone, 'Que massa! 📱 ' + msgVariada(telefone, MSGS.pedeNome));
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.reacaoApp) + ' ' + msgVariada(telefone, MSGS.pedeNome));
       } else {
         estado.etapa = 'perguntando_nicho';
         salvarEstados();
@@ -406,9 +412,11 @@ async function processarMensagem(telefone, textoRecebido) {
         break;
       }
       estado.nome = texto.slice(0, 80);
+      // Pega só o primeiro nome pra chamar de forma íntima
+      const primeiroNome = estado.nome.split(' ')[0];
       estado.etapa = 'vid_endereco';
       salvarEstados();
-      await enviarWhatsApp(telefone, `Prazer, ${estado.nome}! 😊 ` + msgVariada(telefone, MSGS.pedeEndereco));
+      await enviarWhatsApp(telefone, `Prazer, ${primeiroNome}! 😊 ` + msgVariada(telefone, MSGS.pedeEndereco));
       break;
     }
 
@@ -466,9 +474,10 @@ async function processarMensagem(telefone, textoRecebido) {
         break;
       }
       estado.nome = texto.slice(0, 80);
+      const primeiroNome = estado.nome.split(' ')[0];
       estado.etapa = 'app_projeto';
       salvarEstados();
-      await enviarWhatsApp(telefone, `Prazer, ${estado.nome}! 😊 ` + msgVariada(telefone, MSGS.pedeProjeto));
+      await enviarWhatsApp(telefone, `Prazer, ${primeiroNome}! 😊 ` + msgVariada(telefone, MSGS.pedeProjeto));
       break;
     }
 
