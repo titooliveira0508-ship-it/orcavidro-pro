@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { Cliente } from '../types';
 import { novoId, storeClientes } from '../lib/storage';
 
-export default function Clientes() {
+export default function Clientes({
+  aoNovoOrcamento,
+}: {
+  aoNovoOrcamento: (clienteId: string) => void;
+}) {
   const [clientes, setClientes] = useState<Cliente[]>(() => storeClientes.ler());
   const [formAberto, setFormAberto] = useState(false);
   const [editando, setEditando] = useState<Cliente | null>(null);
@@ -88,6 +92,12 @@ export default function Clientes() {
               {c.telefone && <p className="text-xs text-slate-500 mt-0.5">📱 {c.telefone}</p>}
               {c.endereco && <p className="text-xs text-slate-500 mt-0.5">📍 {c.endereco}</p>}
               <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => aoNovoOrcamento(c.id)}
+                  className="text-xs font-bold text-emerald-600"
+                >
+                  📝 Novo orçamento
+                </button>
                 <button
                   onClick={() => abrirEdicao(c)}
                   className="text-xs font-bold text-brand-dark"

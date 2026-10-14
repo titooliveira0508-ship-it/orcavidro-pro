@@ -59,6 +59,7 @@ export default function Pedidos() {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
+    const telefone = cliente?.telefone || p.clienteTelefone || undefined;
     // Fallback para pedidos antigos (sem subtotal/desconto salvos)
     const subtotal = typeof p.subtotal === 'number' ? p.subtotal : subtotalItens(p.itens);
     const desconto = descontoDe(p);
@@ -66,7 +67,7 @@ export default function Pedidos() {
       empresa: storeEmpresa.ler(),
       numero: p.numero,
       clienteNome: p.clienteNome,
-      clienteTelefone: cliente?.telefone || undefined,
+      clienteTelefone: telefone,
       clienteEndereco: cliente?.endereco || undefined,
       itens: p.itens,
       subtotal,
@@ -83,7 +84,7 @@ export default function Pedidos() {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
-    const fone = cliente?.telefone ? soDigitos(cliente.telefone) : '';
+    const fone = soDigitos(cliente?.telefone || p.clienteTelefone || '');
     if (!fone) {
       alert('Este pedido não tem um cliente com telefone cadastrado.');
       return;

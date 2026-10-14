@@ -9,6 +9,7 @@ import { storeCarrinho } from './lib/storage';
 export default function App() {
   const [aba, setAba] = useState<Aba>('orcamento');
   const [qtdCarrinho, setQtdCarrinho] = useState(0);
+  const [clienteParaOrcamento, setClienteParaOrcamento] = useState<string | null>(null);
 
   // Atualiza o contador do carrinho sempre que a aba muda (o carrinho persiste em localStorage)
   useEffect(() => {
@@ -34,8 +35,20 @@ export default function App() {
       </header>
 
       <main className="max-w-md mx-auto px-3 pt-4 pb-28">
-        {aba === 'orcamento' && <NovoOrcamento />}
-        {aba === 'clientes' && <Clientes />}
+        {aba === 'orcamento' && (
+          <NovoOrcamento
+            clienteInicialId={clienteParaOrcamento}
+            aoUsarClienteInicial={() => setClienteParaOrcamento(null)}
+          />
+        )}
+        {aba === 'clientes' && (
+          <Clientes
+            aoNovoOrcamento={(id) => {
+              setClienteParaOrcamento(id);
+              setAba('orcamento');
+            }}
+          />
+        )}
         {aba === 'pedidos' && <Pedidos />}
         {aba === 'empresa' && <Empresa />}
       </main>

@@ -73,6 +73,7 @@ export interface Pedido {
   numero: number;
   clienteId?: string;
   clienteNome: string;
+  clienteTelefone?: string; // telefone avulso (quando o cliente não foi cadastrado)
   itens: ItemOrcamento[];
   subtotal: number; // soma de (valor unitário × quantidade) dos itens
   desconto: number; // desconto em R$ aplicado no fechamento

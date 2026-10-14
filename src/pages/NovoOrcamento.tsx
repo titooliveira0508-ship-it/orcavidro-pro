@@ -23,12 +23,23 @@ import ItemForm from '../components/ItemForm';
 import Carrinho from '../components/Carrinho';
 import { getCategoria } from '../data/categorias';
 
-export default function NovoOrcamento() {
+export default function NovoOrcamento({
+  clienteInicialId,
+  aoUsarClienteInicial,
+}: {
+  clienteInicialId?: string | null;
+  aoUsarClienteInicial?: () => void;
+}) {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [itens, setItens] = useState<ItemOrcamento[]>(() => storeCarrinho.ler());
-  const [clientes] = useState<Cliente[]>(() => storeClientes.ler());
+  const [clientes, setClientes] = useState<Cliente[]>(() => storeClientes.ler());
   const [fechando, setFechando] = useState(false);
-  const [clienteId, setClienteId] = useState('');
+  const [clienteId, setClienteId] = useState(clienteInicialId ?? '');
+  const [nomeAvulso, setNomeAvulso] = useState('');
+  const [foneAvulso, setFoneAvulso] = useState('');
+  const [novoCliAberto, setNovoCliAberto] = useState(false);
+  const [novoCliNome, setNovoCliNome] = useState('');
+  const [novoCliFone, setNovoCliFone] = useState('');
   const [pagamento, setPagamento] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [validadeDias, setValidadeDias] = useState(15);
@@ -38,6 +49,14 @@ export default function NovoOrcamento() {
   useEffect(() => {
     storeCarrinho.salvar(itens);
   }, [itens]);
+
+  useEffect(() => {
+    if (clienteInicialId) {
+      setClienteId(clienteInicialId);
+      aoUsarClienteInicial?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const categoria = categoriaId ? getCategoria(categoriaId) : undefined;
   const subtotal = subtotalItens(itens);
@@ -54,14 +73,46 @@ export default function NovoOrcamento() {
     );
   }
 
+  // Cliente selecionado na lista ou dados avulsos digitados na hora
+  function clienteResolvido(): Cliente | undefined {
+    const salvo = clientes.find((c) => c.id === clienteId);
+    if (salvo) return salvo;
+    const nome = nomeAvulso.trim();
+    const telefone = foneAvulso.trim();
+    if (nome || telefone) {
+      return { id: '', nome: nome || 'Cliente avulso', telefone, endereco: '', criadoEm: 0 };
+    }
+    return undefined;
+  }
+
+  function salvarNovoCliente() {
+    const nome = novoCliNome.trim();
+    if (!nome) return;
+    const novo: Cliente = {
+      id: novoId('cli'),
+      nome,
+      telefone: novoCliFone.trim(),
+      endereco: '',
+      criadoEm: Date.now(),
+    };
+    const atualizados = [novo, ...clientes];
+    setClientes(atualizados);
+    storeClientes.salvar(atualizados);
+    setClienteId(novo.id);
+    setNovoCliAberto(false);
+    setNovoCliNome('');
+    setNovoCliFone('');
+  }
+
   function fecharPedido() {
-    const cliente = clientes.find((c) => c.id === clienteId);
+    const cliente = clienteResolvido();
     const numero = proximoNumeroPedido();
     const pedido: Pedido = {
       id: novoId('ped'),
       numero,
-      clienteId: cliente?.id,
+      clienteId: cliente?.id || undefined,
       clienteNome: cliente?.nome ?? 'Cliente avulso',
+      clienteTelefone: cliente?.telefone || undefined,
       itens,
       subtotal,
       desconto,
@@ -78,6 +129,8 @@ export default function NovoOrcamento() {
     storeCarrinho.limpar();
     setFechando(false);
     setClienteId('');
+    setNomeAvulso('');
+    setFoneAvulso('');
     setPagamento('');
     setObservacoes('');
     setValidadeDias(15);
@@ -87,7 +140,7 @@ export default function NovoOrcamento() {
   }
 
   function dadosPdfPrevia() {
-    const cliente = clientes.find((c) => c.id === clienteId);
+    const cliente = clienteResolvido();
     return {
       empresa: storeEmpresa.ler(),
       numero: undefined as number | undefined,
@@ -111,10 +164,10 @@ export default function NovoOrcamento() {
   }
 
   async function enviarWhatsPrevia() {
-    const cliente = clientes.find((c) => c.id === clienteId);
+    const cliente = clienteResolvido();
     const fone = cliente?.telefone ? soDigitos(cliente.telefone) : '';
     if (!fone) {
-      alert('Selecione um cliente com telefone para enviar via WhatsApp.');
+      alert('Selecione um cliente ou digite o número do WhatsApp.');
       return;
     }
     await gerarPdfOrcamento(dadosPdfPrevia());
@@ -169,6 +222,40 @@ export default function NovoOrcamento() {
 
       {itens.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1">
+              Cliente
+            </label>
+            <select
+              value={clienteId}
+              onChange={(e) => setClienteId(e.target.value)}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+            >
+              <option value="">Não cadastrado (avulso)</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!clienteId && (
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={nomeAvulso}
+                onChange={(e) => setNomeAvulso(e.target.value)}
+                placeholder="Nome do cliente"
+                className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+              />
+              <input
+                value={foneAvulso}
+                onChange={(e) => setFoneAvulso(e.target.value)}
+                placeholder="WhatsApp (número)"
+                inputMode="tel"
+                className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <label className="text-xs font-bold text-slate-600 uppercase tracking-wide whitespace-nowrap">
               Validade (dias)
@@ -241,6 +328,45 @@ export default function NovoOrcamento() {
                   </option>
                 ))}
               </select>
+              {!novoCliAberto ? (
+                <button
+                  onClick={() => setNovoCliAberto(true)}
+                  className="mt-1.5 text-xs font-bold text-brand-dark"
+                >
+                  ＋ Cadastrar novo cliente
+                </button>
+              ) : (
+                <div className="mt-2 space-y-2 rounded-xl bg-slate-50 border border-slate-200 p-3">
+                  <input
+                    value={novoCliNome}
+                    onChange={(e) => setNovoCliNome(e.target.value)}
+                    placeholder="Nome *"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={novoCliFone}
+                    onChange={(e) => setNovoCliFone(e.target.value)}
+                    placeholder="Telefone / WhatsApp"
+                    inputMode="tel"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNovoCliAberto(false)}
+                      className="flex-1 py-2 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={salvarNovoCliente}
+                      disabled={!novoCliNome.trim()}
+                      className="flex-1 py-2 rounded-xl bg-brand text-white text-xs font-black disabled:opacity-40"
+                    >
+                      Salvar e usar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
