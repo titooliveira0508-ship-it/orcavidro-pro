@@ -12,10 +12,12 @@ import {
   totalItem,
 } from '../lib/storage';
 import {
+  abrirPreviaPdf,
+  compartilharPdfWhatsApp,
   gerarPdfOrcamento,
-  linkWhatsApp,
   mensagemOrcamento,
   soDigitos,
+  type DadosPdf,
 } from '../lib/pdf';
 
 const STATUS: { valor: StatusPedido; rotulo: string; cor: string }[] = [
@@ -55,14 +57,13 @@ export default function Pedidos() {
     setPedidos((prev) => prev.filter((p) => p.id !== id));
   }
 
-  async function gerarPdf(p: Pedido) {
+  function dadosPdfPedido(p: Pedido): DadosPdf {
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
     // Fallback para pedidos antigos (sem subtotal/desconto salvos)
     const subtotal = typeof p.subtotal === 'number' ? p.subtotal : subtotalItens(p.itens);
-    const desconto = descontoDe(p);
-    await gerarPdfOrcamento({
+    return {
       empresa: storeEmpresa.ler(),
       numero: p.numero,
       clienteNome: p.clienteNome,
@@ -70,13 +71,17 @@ export default function Pedidos() {
       clienteEndereco: cliente?.endereco || undefined,
       itens: p.itens,
       subtotal,
-      desconto,
+      desconto: descontoDe(p),
       total: p.total,
       validadeDias: p.validadeDias && p.validadeDias > 0 ? p.validadeDias : 15,
       observacoes: p.observacoes,
       pagamento: p.pagamento,
       dataEmissao: new Date(p.criadoEm),
-    });
+    };
+  }
+
+  async function gerarPdf(p: Pedido) {
+    await abrirPreviaPdf(dadosPdfPedido(p));
   }
 
   async function enviarWhats(p: Pedido) {
@@ -88,8 +93,12 @@ export default function Pedidos() {
       alert('Este pedido não tem um cliente com telefone cadastrado.');
       return;
     }
-    await gerarPdf(p);
-    window.open(linkWhatsApp(fone, mensagemOrcamento(p.clienteNome, p.numero, p.total)), '_blank');
+    const pdf = await gerarPdfOrcamento(dadosPdfPedido(p));
+    await compartilharPdfWhatsApp(
+      fone,
+      mensagemOrcamento(p.clienteNome, p.numero, p.total),
+      pdf
+    );
   }
 
   const visiveis = filtro === 'todos' ? pedidos : pedidos.filter((p) => p.status === filtro);

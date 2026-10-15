@@ -13,8 +13,9 @@ import {
   totalPedido,
 } from '../lib/storage';
 import {
+  abrirPreviaPdf,
+  compartilharPdfWhatsApp,
   gerarPdfOrcamento,
-  linkWhatsApp,
   mensagemOrcamento,
   soDigitos,
 } from '../lib/pdf';
@@ -107,7 +108,7 @@ export default function NovoOrcamento() {
 
   async function gerarPdfPrevia() {
     if (itens.length === 0) return;
-    await gerarPdfOrcamento(dadosPdfPrevia());
+    await abrirPreviaPdf(dadosPdfPrevia());
   }
 
   async function enviarWhatsPrevia() {
@@ -117,9 +118,9 @@ export default function NovoOrcamento() {
       alert('Selecione um cliente com telefone para enviar via WhatsApp.');
       return;
     }
-    await gerarPdfOrcamento(dadosPdfPrevia());
+    const pdf = await gerarPdfOrcamento(dadosPdfPrevia());
     const msg = mensagemOrcamento(cliente!.nome, undefined, total);
-    window.open(linkWhatsApp(fone, msg), '_blank');
+    await compartilharPdfWhatsApp(fone, msg, pdf);
   }
 
   return (
@@ -196,7 +197,7 @@ export default function NovoOrcamento() {
             </button>
           </div>
           <p className="text-[11px] text-slate-400 text-center">
-            O PDF baixa no aparelho — no WhatsApp, anexe o arquivo na conversa.
+            O PDF é anexado direto na conversa do WhatsApp pelo menu de compartilhar do aparelho. 📎
           </p>
         </div>
       )}
