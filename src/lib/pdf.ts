@@ -72,8 +72,38 @@ function chaveDiagrama(item: ItemOrcamento): string {
   ].join('|');
 }
 
-export function gerarPdfOrcamento(d: DadosPdf): Promise<void> {
-  return gerarPdfOrcamentoAsync(d);
+export interface PdfGerado {
+  blob: Blob;
+  nomeArquivo: string;
+}
+
+/** Gera o PDF e devolve o blob + nome de arquivo (sem abrir nem baixar). */
+export function gerarPdfOrcamento(d: DadosPdf): Promise<PdfGerado> {
+  return gerarPdfOrcamentoAsync(d).then((doc) => ({
+    blob: doc.output('blob'),
+    nomeArquivo: nomeArquivoPdf(d),
+  }));
+}
+
+/** Abre o PDF em nova aba para conferência (botão "Gerar PDF"). */
+export async function abrirPreviaPdf(d: DadosPdf): Promise<void> {
+  const { blob } = await gerarPdfOrcamento(d);
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function nomeArquivoPdf(d: DadosPdf): string {
+  const base = d.numero ? `orcamento-${d.numero}` : 'orcamento';
+  const data = d.dataEmissao.toISOString().slice(0, 10);
+  const cliente = d.clienteNome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+    .slice(0, 24);
+  return `${base}-${data}${cliente ? `-${cliente}` : ''}.pdf`;
 }
 
 // ─── Imagens (carregadas como base64, com cache) ────────────────────────────
@@ -116,7 +146,7 @@ const COL_UNIT_X = 148; // valor unitário (direita em 168)
 const COL_TOTAL_X = 210 - MARGEM; // total do item (direita)
 const ALT_LINHA_CAB = 9;
 
-async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
+async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<jsPDF> {
   // Pré-carrega logo + diagramas técnicos dos itens
   // Logo personalizada da empresa (upload) tem prioridade; senão usa a padrão
   const logoBase64 =
@@ -394,9 +424,7 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<void> {
   doc.setTextColor(...CINZA);
   doc.text('Orçamento gerado pelo OrçaVidro Pro.', MARGEM, y);
 
-  // ── Abrir em nova aba para conferência (em vez de baixar direto) ──────
-  const url = doc.output('bloburl');
-  window.open(url, '_blank');
+  return doc;
 }
 
 // ─── WhatsApp ────────────────────────────────────────────────────────────────
@@ -407,6 +435,45 @@ export function soDigitos(telefone: string): string {
 
 export function linkWhatsApp(telefone: string, mensagem: string): string {
   return `https://wa.me/${soDigitos(telefone)}?text=${encodeURIComponent(mensagem)}`;
+}
+
+/**
+ * Envia o PDF via WhatsApp usando o menu de compartilhar do aparelho
+ * (Web Share API): o arquivo vai ANEXADO na conversa do WhatsApp.
+ * Onde não há suporte, faz fallback: baixa o PDF e abre o wa.me
+ * com a mensagem pronta (basta anexar o arquivo baixado).
+ */
+export async function compartilharPdfWhatsApp(
+  telefone: string,
+  mensagem: string,
+  pdf: PdfGerado
+): Promise<'compartilhado' | 'fallback'> {
+  const arquivo = new File([pdf.blob], pdf.nomeArquivo, { type: 'application/pdf' });
+  const nav = navigator as Navigator & {
+    canShare?: (dados?: { files?: File[] }) => boolean;
+  };
+  try {
+    if (typeof nav.canShare === 'function' && nav.canShare({ files: [arquivo] })) {
+      await navigator.share({
+        files: [arquivo],
+        title: 'Orçamento OrçaVidro Pro',
+        text: mensagem,
+      });
+      return 'compartilhado';
+    }
+  } catch {
+    // usuário cancelou ou o compartilhamento falhou → segue para o fallback
+  }
+  const url = URL.createObjectURL(pdf.blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = pdf.nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  window.open(linkWhatsApp(telefone, mensagem), '_blank');
+  return 'fallback';
 }
 
 export function mensagemOrcamento(
