@@ -12,14 +12,9 @@ import {
   subtotalItens,
   totalPedido,
 } from '../lib/storage';
-import {
-  abrirPreviaPdf,
-  compartilharPdfWhatsApp,
-  gerarPdfOrcamento,
-  mensagemOrcamento,
-  soDigitos,
-} from '../lib/pdf';
 import CategoriaCard from '../components/CategoriaCard';
+// jsPDF é carregado sob demanda (import dinâmico nos handlers abaixo)
+// para não pesar o chunk inicial no celular.
 import ItemForm from '../components/ItemForm';
 import Carrinho from '../components/Carrinho';
 import { getCategoria } from '../data/categorias';
@@ -35,6 +30,8 @@ export default function NovoOrcamento() {
   const [validadeDias, setValidadeDias] = useState(15);
   const [desconto, setDesconto] = useState(0);
   const [pedidoFeito, setPedidoFeito] = useState<number | null>(null);
+  const [processandoPdf, setProcessandoPdf] = useState(false);
+  const [erroPdf, setErroPdf] = useState('');
 
   useEffect(() => {
     storeCarrinho.salvar(itens);
@@ -107,20 +104,46 @@ export default function NovoOrcamento() {
   }
 
   async function gerarPdfPrevia() {
-    if (itens.length === 0) return;
-    await abrirPreviaPdf(dadosPdfPrevia());
+    if (itens.length === 0 || processandoPdf) return;
+    // Aba aberta DE FORMA SÍNCRONA no clique, antes de qualquer await
+    // (import dinâmico, geração do PDF) — senão o navegador bloqueia o popup.
+    const aba = window.open('', '_blank');
+    setErroPdf('');
+    setProcessandoPdf(true);
+    try {
+      const { abrirPreviaPdf } = await import('../lib/pdf');
+      await abrirPreviaPdf(dadosPdfPrevia(), aba);
+    } catch {
+      aba?.close();
+      setErroPdf('Não foi possível gerar o PDF. Tente novamente.');
+    } finally {
+      setProcessandoPdf(false);
+    }
   }
 
   async function enviarWhatsPrevia() {
+    if (processandoPdf) return;
     const cliente = clientes.find((c) => c.id === clienteId);
-    const fone = cliente?.telefone ? soDigitos(cliente.telefone) : '';
-    if (!fone) {
-      alert('Selecione um cliente com telefone para enviar via WhatsApp.');
+    const tel = cliente?.telefone?.trim() || '';
+    if (!tel) {
+      setErroPdf('Selecione um cliente com telefone para enviar via WhatsApp.');
       return;
     }
-    const pdf = await gerarPdfOrcamento(dadosPdfPrevia());
-    const msg = mensagemOrcamento(cliente!.nome, undefined, total);
-    await compartilharPdfWhatsApp(fone, msg, pdf);
+    setErroPdf('');
+    setProcessandoPdf(true);
+    try {
+      const { gerarPdfOrcamento, mensagemOrcamento, compartilharPdfWhatsApp } =
+        await import('../lib/pdf');
+      const nomeEmpresa = storeEmpresa.ler().nome;
+      const pdf = await gerarPdfOrcamento(dadosPdfPrevia());
+      const msg = mensagemOrcamento(cliente!.nome, undefined, total, nomeEmpresa);
+      // 'cancelado' = usuário desistiu no diálogo de compartilhar: no-op.
+      await compartilharPdfWhatsApp(tel, msg, pdf, nomeEmpresa);
+    } catch {
+      setErroPdf('Não foi possível enviar pelo WhatsApp. Tente novamente.');
+    } finally {
+      setProcessandoPdf(false);
+    }
   }
 
   return (
@@ -185,17 +208,22 @@ export default function NovoOrcamento() {
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={gerarPdfPrevia}
-              className="py-2.5 rounded-2xl border-2 border-brand text-brand-dark font-black text-sm active:scale-[0.99] transition-transform"
+              disabled={processandoPdf}
+              className="py-2.5 rounded-2xl border-2 border-brand text-brand-dark font-black text-sm active:scale-[0.99] transition-transform disabled:opacity-50"
             >
-              📄 Gerar PDF
+              {processandoPdf ? '⏳ Gerando…' : '📄 Gerar PDF'}
             </button>
             <button
               onClick={enviarWhatsPrevia}
-              className="py-2.5 rounded-2xl bg-emerald-500 text-white font-black text-sm shadow-md active:scale-[0.99] transition-transform"
+              disabled={processandoPdf}
+              className="py-2.5 rounded-2xl bg-emerald-500 text-white font-black text-sm shadow-md active:scale-[0.99] transition-transform disabled:opacity-50"
             >
-              💬 WhatsApp
+              {processandoPdf ? '⏳ Enviando…' : '💬 WhatsApp'}
             </button>
           </div>
+          {erroPdf && (
+            <p className="text-xs font-semibold text-red-600 text-center">{erroPdf}</p>
+          )}
           <p className="text-[11px] text-slate-400 text-center">
             O PDF é anexado direto na conversa do WhatsApp pelo menu de compartilhar do aparelho. 📎
           </p>

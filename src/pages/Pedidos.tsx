@@ -11,14 +11,9 @@ import {
   subtotalItens,
   totalItem,
 } from '../lib/storage';
-import {
-  abrirPreviaPdf,
-  compartilharPdfWhatsApp,
-  gerarPdfOrcamento,
-  mensagemOrcamento,
-  soDigitos,
-  type DadosPdf,
-} from '../lib/pdf';
+import { type DadosPdf } from '../lib/pdf';
+// jsPDF é carregado sob demanda (import dinâmico nos handlers abaixo)
+// para não pesar o chunk inicial no celular.
 
 const STATUS: { valor: StatusPedido; rotulo: string; cor: string }[] = [
   { valor: 'pendente', rotulo: 'Pendente', cor: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -39,6 +34,8 @@ export default function Pedidos() {
   const [expandido, setExpandido] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<'todos' | StatusPedido>('todos');
   const [financeiroId, setFinanceiroId] = useState<string | null>(null);
+  const [processandoPdf, setProcessandoPdf] = useState<string | null>(null);
+  const [erroPdf, setErroPdf] = useState<{ pedidoId: string; msg: string } | null>(null);
 
   useEffect(() => {
     storePedidos.salvar(pedidos);
@@ -81,24 +78,58 @@ export default function Pedidos() {
   }
 
   async function gerarPdf(p: Pedido) {
-    await abrirPreviaPdf(dadosPdfPedido(p));
+    if (processandoPdf) return;
+    // Aba aberta DE FORMA SÍNCRONA no clique, antes de qualquer await
+    // (import dinâmico, geração do PDF) — senão o navegador bloqueia o popup.
+    const aba = window.open('', '_blank');
+    setErroPdf(null);
+    setProcessandoPdf(p.id);
+    try {
+      const { abrirPreviaPdf } = await import('../lib/pdf');
+      await abrirPreviaPdf(dadosPdfPedido(p), aba);
+    } catch {
+      aba?.close();
+      setErroPdf({ pedidoId: p.id, msg: 'Não foi possível gerar o PDF. Tente novamente.' });
+    } finally {
+      setProcessandoPdf(null);
+    }
   }
 
   async function enviarWhats(p: Pedido) {
+    if (processandoPdf) return;
     const cliente = p.clienteId
       ? storeClientes.ler().find((c) => c.id === p.clienteId)
       : undefined;
-    const fone = cliente?.telefone ? soDigitos(cliente.telefone) : '';
-    if (!fone) {
-      alert('Este pedido não tem um cliente com telefone cadastrado.');
+    const tel = cliente?.telefone?.trim() || '';
+    if (!tel) {
+      setErroPdf({
+        pedidoId: p.id,
+        msg: 'Este pedido não tem um cliente com telefone cadastrado.',
+      });
       return;
     }
-    const pdf = await gerarPdfOrcamento(dadosPdfPedido(p));
-    await compartilharPdfWhatsApp(
-      fone,
-      mensagemOrcamento(p.clienteNome, p.numero, p.total),
-      pdf
-    );
+    setErroPdf(null);
+    setProcessandoPdf(p.id);
+    try {
+      const { gerarPdfOrcamento, mensagemOrcamento, compartilharPdfWhatsApp } =
+        await import('../lib/pdf');
+      const nomeEmpresa = storeEmpresa.ler().nome;
+      const pdf = await gerarPdfOrcamento(dadosPdfPedido(p));
+      // 'cancelado' = usuário desistiu no diálogo de compartilhar: no-op.
+      await compartilharPdfWhatsApp(
+        tel,
+        mensagemOrcamento(p.clienteNome, p.numero, p.total, nomeEmpresa),
+        pdf,
+        nomeEmpresa
+      );
+    } catch {
+      setErroPdf({
+        pedidoId: p.id,
+        msg: 'Não foi possível enviar pelo WhatsApp. Tente novamente.',
+      });
+    } finally {
+      setProcessandoPdf(null);
+    }
   }
 
   const visiveis = filtro === 'todos' ? pedidos : pedidos.filter((p) => p.status === filtro);
@@ -112,7 +143,7 @@ export default function Pedidos() {
           <button
             key={f}
             onClick={() => setFiltro(f)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+            className={`min-h-[40px] px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors ${
               filtro === f
                 ? 'bg-brand border-brand text-white'
                 : 'bg-white border-slate-300 text-slate-500'
@@ -157,7 +188,7 @@ export default function Pedidos() {
                   <button
                     key={s.valor}
                     onClick={() => mudarStatus(p.id, s.valor)}
-                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                    className={`min-h-[40px] px-2.5 py-1 rounded-full text-[11px] font-bold border ${
                       p.status === s.valor ? s.cor : 'bg-white text-slate-400 border-slate-200'
                     }`}
                   >
@@ -210,15 +241,17 @@ export default function Pedidos() {
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       onClick={() => gerarPdf(p)}
-                      className="py-2 rounded-xl border-2 border-brand text-brand-dark text-xs font-black"
+                      disabled={processandoPdf !== null}
+                      className="py-2 rounded-xl border-2 border-brand text-brand-dark text-xs font-black disabled:opacity-50"
                     >
-                      📄 Gerar PDF
+                      {processandoPdf === p.id ? '⏳ Gerando…' : '📄 Gerar PDF'}
                     </button>
                     <button
                       onClick={() => enviarWhats(p)}
-                      className="py-2 rounded-xl bg-emerald-500 text-white text-xs font-black shadow-sm"
+                      disabled={processandoPdf !== null}
+                      className="py-2 rounded-xl bg-emerald-500 text-white text-xs font-black shadow-sm disabled:opacity-50"
                     >
-                      💬 WhatsApp
+                      {processandoPdf === p.id ? '⏳ Enviando…' : '💬 WhatsApp'}
                     </button>
                     <button
                       onClick={() => setFinanceiroId(p.id)}
@@ -227,6 +260,9 @@ export default function Pedidos() {
                       💰 Financeiro
                     </button>
                   </div>
+                  {erroPdf?.pedidoId === p.id && (
+                    <p className="text-xs font-semibold text-red-600">{erroPdf.msg}</p>
+                  )}
                   <button
                     onClick={() => excluir(p.id)}
                     className="text-xs font-bold text-red-500"

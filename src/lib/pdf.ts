@@ -72,6 +72,42 @@ function chaveDiagrama(item: ItemOrcamento): string {
   ].join('|');
 }
 
+// Cache em memória dos diagramas já rasterizados, por conteúdo do diagrama.
+// Preview + compartilhamento reaproveitam sem rasterizar tudo de novo (B7).
+const cacheDiagramas = new Map<string, string | null>();
+
+/** Rasteriza os diagramas dos itens em paralelo (Promise.all), com cache. */
+async function rasterizarDiagramas(itens: ItemOrcamento[]): Promise<Map<string, string | null>> {
+  const chaves = [...new Set(itens.map(chaveDiagrama))];
+  const entradas = await Promise.all(
+    chaves.map(async (chave): Promise<[string, string | null]> => {
+      const emCache = cacheDiagramas.get(chave);
+      if (emCache !== undefined) return [chave, emCache];
+      const item = itens.find((i) => chaveDiagrama(i) === chave);
+      let img: string | null = null;
+      if (item) {
+        try {
+          img = await rasterizarSvg(
+            gerarSvgDiagrama({
+              categoriaId: item.categoriaId,
+              larguraMm: item.larguraMm,
+              alturaMm: item.alturaMm,
+              alturaOpcao: item.alturaOpcao,
+              subOpcao: item.subOpcao,
+            }),
+            440
+          );
+        } catch {
+          img = null;
+        }
+      }
+      cacheDiagramas.set(chave, img);
+      return [chave, img];
+    })
+  );
+  return new Map(entradas);
+}
+
 export interface PdfGerado {
   blob: Blob;
   nomeArquivo: string;
@@ -85,17 +121,41 @@ export function gerarPdfOrcamento(d: DadosPdf): Promise<PdfGerado> {
   }));
 }
 
-/** Abre o PDF em nova aba para conferência (botão "Gerar PDF"). */
-export async function abrirPreviaPdf(d: DadosPdf): Promise<void> {
-  const { blob } = await gerarPdfOrcamento(d);
-  const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+/**
+ * Abre o PDF em nova aba para conferência (botão "Gerar PDF").
+ * @param aba popup já aberto DE FORMA SÍNCRONA no gesto do clique (pela página),
+ * antes de qualquer await — senão o navegador bloqueia o popup (B1). Se não for
+ * passada, a aba é aberta aqui (o corpo da função async executa de forma
+ * síncrona até o primeiro await, então ainda conta como gesto).
+ */
+export async function abrirPreviaPdf(d: DadosPdf, aba?: Window | null): Promise<void> {
+  const popup = aba ?? window.open('', '_blank');
+  try {
+    const { blob } = await gerarPdfOrcamento(d);
+    const url = URL.createObjectURL(blob);
+    // Revoga o blob quando a aba for descartada (pagehide), em vez de um
+    // timeout curto que pode corromper o carregamento em aparelhos lentos (B3).
+    const revogar = () => URL.revokeObjectURL(url);
+    if (popup && !popup.closed) {
+      popup.addEventListener('pagehide', revogar);
+      popup.location.href = url;
+    } else {
+      // Popup bloqueado mesmo assim: tenta abrir de novo com a URL pronta.
+      const novaAba = window.open(url, '_blank');
+      novaAba?.addEventListener('pagehide', revogar);
+    }
+    // Rede de segurança caso o pagehide não dispare.
+    setTimeout(revogar, 300_000);
+  } catch (e) {
+    // Se a geração falhou, não deixa a aba vazia aberta para trás.
+    popup?.close();
+    throw e;
+  }
 }
 
 function nomeArquivoPdf(d: DadosPdf): string {
   const base = d.numero ? `orcamento-${d.numero}` : 'orcamento';
-  const data = d.dataEmissao.toISOString().slice(0, 10);
+  const data = dataEmissaoValida(d).toISOString().slice(0, 10);
   const cliente = d.clienteNome
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -106,9 +166,28 @@ function nomeArquivoPdf(d: DadosPdf): string {
   return `${base}-${data}${cliente ? `-${cliente}` : ''}.pdf`;
 }
 
+/**
+ * Devolve uma data de emissão válida: datas corrompidas vindas do
+ * localStorage (Invalid Date) quebram o toISOString() com RangeError (B9).
+ */
+function dataEmissaoValida(d: DadosPdf): Date {
+  return d.dataEmissao instanceof Date && !isNaN(d.dataEmissao.getTime())
+    ? d.dataEmissao
+    : new Date();
+}
+
 // ─── Imagens (carregadas como base64, com cache) ────────────────────────────
 
 const cacheImagens = new Map<string, string | null>();
+
+/**
+ * Detecta o formato a partir do data-URL para o addImage do jsPDF.
+ * A logo personalizada vem de upload do celular e pode ser JPEG — com 'PNG'
+ * hardcoded ela sumia do PDF (B4). Diagramas rasterizados são PNG.
+ */
+function formatoImagem(dataUrl: string): 'PNG' | 'JPEG' {
+  return /^data:image\/jpe?g/i.test(dataUrl) ? 'JPEG' : 'PNG';
+}
 
 function carregarImagem(caminho: string): Promise<string | null> {
   if (cacheImagens.has(caminho)) return Promise.resolve(cacheImagens.get(caminho) ?? null);
@@ -152,20 +231,7 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<jsPDF> {
   const logoBase64 =
     d.empresa.logo ||
     (await carregarImagem('/logo-empresa.png').catch(() => null));
-  const diagramas = new Map<string, string | null>();
-  for (const item of d.itens) {
-    const chave = chaveDiagrama(item);
-    if (!diagramas.has(chave)) {
-      const svg = gerarSvgDiagrama({
-        categoriaId: item.categoriaId,
-        larguraMm: item.larguraMm,
-        alturaMm: item.alturaMm,
-        alturaOpcao: item.alturaOpcao,
-        subOpcao: item.subOpcao,
-      });
-      diagramas.set(chave, await rasterizarSvg(svg, 440));
-    }
-  }
+  const diagramas = await rasterizarDiagramas(d.itens);
 
   const doc = new jsPDF();
   let y = 14;
@@ -185,7 +251,7 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<jsPDF> {
   const temLogo = !!logoBase64;
   if (temLogo) {
     try {
-      doc.addImage(logoBase64 as string, 'PNG', MARGEM, y, 20, 30);
+      doc.addImage(logoBase64 as string, formatoImagem(logoBase64 as string), MARGEM, y, 20, 30);
     } catch {
       /* segue sem logo */
     }
@@ -227,7 +293,7 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<jsPDF> {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(...CINZA);
-  doc.text(`Emitido em ${d.dataEmissao.toLocaleDateString('pt-BR')}`, 210 - MARGEM, y + 26, {
+  doc.text(`Emitido em ${dataEmissaoValida(d).toLocaleDateString('pt-BR')}`, 210 - MARGEM, y + 26, {
     align: 'right',
   });
 
@@ -311,7 +377,7 @@ async function gerarPdfOrcamentoAsync(d: DadosPdf): Promise<jsPDF> {
 
     if (temImg && imgBase64) {
       try {
-        doc.addImage(imgBase64, 'PNG', COL_DESC_X + 3, y + 2, 16, 20);
+        doc.addImage(imgBase64, formatoImagem(imgBase64), COL_DESC_X + 3, y + 2, 16, 20);
       } catch {
         /* segue sem imagem */
       }
@@ -433,8 +499,26 @@ export function soDigitos(telefone: string): string {
   return telefone.replace(/\D/g, '');
 }
 
-export function linkWhatsApp(telefone: string, mensagem: string): string {
-  return `https://wa.me/${soDigitos(telefone)}?text=${encodeURIComponent(mensagem)}`;
+/**
+ * Normaliza um telefone para o wa.me: remove tudo que não é dígito; se tiver
+ * 10–11 dígitos (formato nacional BR, ex. (11) 99999-8888) e não começar com
+ * 55, prefixa o DDI do Brasil. Retorna null se o número for inválido (B6).
+ */
+export function normalizarTelefoneWhats(telefone: string): string | null {
+  const digitos = soDigitos(telefone);
+  if (!digitos) return null;
+  const comDdi =
+    digitos.length >= 10 && digitos.length <= 11 && !digitos.startsWith('55')
+      ? `55${digitos}`
+      : digitos;
+  return comDdi.length >= 10 && comDdi.length <= 15 ? comDdi : null;
+}
+
+/** Monta o link wa.me já normalizado, ou null se o telefone for inválido. */
+export function linkWhatsApp(telefone: string, mensagem: string): string | null {
+  const numero = normalizarTelefoneWhats(telefone);
+  if (!numero) return null;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}`;
 }
 
 /**
@@ -446,23 +530,32 @@ export function linkWhatsApp(telefone: string, mensagem: string): string {
 export async function compartilharPdfWhatsApp(
   telefone: string,
   mensagem: string,
-  pdf: PdfGerado
-): Promise<'compartilhado' | 'fallback'> {
+  pdf: PdfGerado,
+  empresaNome?: string
+): Promise<'compartilhado' | 'cancelado' | 'fallback'> {
   const arquivo = new File([pdf.blob], pdf.nomeArquivo, { type: 'application/pdf' });
   const nav = navigator as Navigator & {
     canShare?: (dados?: { files?: File[] }) => boolean;
   };
+  // NOTA (Android): o WhatsApp no Android ignora o campo `text` da Web Share
+  // API e recebe apenas o arquivo anexado — o texto da mensagem só chega no
+  // fallback via wa.me. Por isso o título usa o nome da empresa (contexto
+  // mínimo garantido no Android) e o nome do arquivo carrega nº + cliente.
+  const nomeEmpresa = empresaNome?.trim() || 'OrçaVidro Pro';
   try {
     if (typeof nav.canShare === 'function' && nav.canShare({ files: [arquivo] })) {
       await navigator.share({
         files: [arquivo],
-        title: 'Orçamento OrçaVidro Pro',
+        title: `Orçamento ${nomeEmpresa}`,
         text: mensagem,
       });
       return 'compartilhado';
     }
-  } catch {
-    // usuário cancelou ou o compartilhamento falhou → segue para o fallback
+  } catch (e) {
+    // Usuário cancelou o diálogo de compartilhar: é no-op, NÃO dispara o
+    // fallback (senão o cancelamento virava download + abertura do WhatsApp).
+    if (e instanceof DOMException && e.name === 'AbortError') return 'cancelado';
+    // Demais erros (ex.: compartilhamento falhou de verdade) → segue p/ fallback.
   }
   const url = URL.createObjectURL(pdf.blob);
   const a = document.createElement('a');
@@ -471,20 +564,24 @@ export async function compartilharPdfWhatsApp(
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  window.open(linkWhatsApp(telefone, mensagem), '_blank');
+  // Revogação em 60s: em aparelhos lentos o download pode não ter terminado (B3).
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const link = linkWhatsApp(telefone, mensagem);
+  if (link) window.open(link, '_blank');
   return 'fallback';
 }
 
 export function mensagemOrcamento(
   clienteNome: string,
   numero: number | undefined,
-  total: number
+  total: number,
+  empresaNome = 'OrçaVidro Pro'
 ): string {
   const ref = numero ? `nº ${numero}` : 'em anexo';
   const primeiroNome = clienteNome.split(' ')[0] || 'cliente';
+  const nome = empresaNome.trim() || 'OrçaVidro Pro';
   return (
-    `Olá, ${primeiroNome}! Aqui é da OrçaVidro Pro. ` +
+    `Olá, ${primeiroNome}! Aqui é da ${nome}. ` +
     `Segue o orçamento ${ref} no valor de ${formatarMoeda(total)}. ` +
     `Qualquer dúvida estou à disposição!`
   );
