@@ -103,7 +103,7 @@ export default function Carrinho({
                     <div className="flex items-center rounded-xl border border-slate-300 overflow-hidden">
                       <button
                         onClick={() => aoAlterarQuantidade(item.id, Math.max(1, qtd - 1))}
-                        className="px-2.5 py-1 text-base font-black text-slate-600 bg-slate-50 active:bg-slate-200"
+                        className="min-h-[40px] px-2.5 py-1 text-base font-black text-slate-600 bg-slate-50 active:bg-slate-200"
                         aria-label="Diminuir quantidade"
                       >
                         −
@@ -113,7 +113,7 @@ export default function Carrinho({
                       </span>
                       <button
                         onClick={() => aoAlterarQuantidade(item.id, qtd + 1)}
-                        className="px-2.5 py-1 text-base font-black text-slate-600 bg-slate-50 active:bg-slate-200"
+                        className="min-h-[40px] px-2.5 py-1 text-base font-black text-slate-600 bg-slate-50 active:bg-slate-200"
                         aria-label="Aumentar quantidade"
                       >
                         +
@@ -145,7 +145,7 @@ export default function Carrinho({
                 placeholder="0,00"
                 value={desconto > 0 ? desconto.toString().replace('.', ',') : ''}
                 onChange={(e) => aoAlterarDesconto(parseDesconto(e.target.value))}
-                className="w-28 rounded-xl border border-slate-300 px-3 py-1.5 text-sm text-right font-bold"
+                className="w-28 rounded-xl border border-slate-300 px-3 py-1.5 text-base text-right font-bold"
               />
             </div>
             <div className="flex items-center justify-between pt-1 border-t border-slate-200">

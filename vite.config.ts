@@ -11,7 +11,7 @@ export default defineConfig({
         name: 'OrçaVidro Pro',
         short_name: 'OrçaVidro',
         description: 'Orçamentos para vidraçaria',
-        theme_color: '#0f766e',
+        theme_color: '#0B2A6E',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '.',

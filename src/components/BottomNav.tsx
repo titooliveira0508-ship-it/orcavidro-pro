@@ -61,7 +61,7 @@ const ABAS: { id: Aba; rotulo: string; svg: JSX.Element }[] = [
 
 export default function BottomNav({ ativa, aoTrocar, qtdCarrinho }: Props) {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+    <nav className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 shadow-[0_-2px_12px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-md mx-auto grid grid-cols-4">
         {ABAS.map((aba) => {
           const selecionada = aba.id === ativa;

@@ -21,6 +21,11 @@ const PORT = process.env.PORT || 3001;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || '';
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN || '';
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || '';
+// Token simples para proteger endpoints de dados (só o Tito usa o app).
+// Configure ADMIN_TOKEN nas variáveis de ambiente do Render.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+
+const crypto = require('crypto');
 
 const STATE_FILE = path.join(__dirname, 'state.json');
 const LEADS_FILE = path.join(__dirname, 'leads.json');
@@ -539,6 +544,28 @@ app.get('/webhook', (req, res) => {
 
 // Recebimento de mensagens
 app.post('/webhook', async (req, res) => {
+  // ── C2: verifica assinatura da Meta (X-Hub-Signature-256) ──────────────
+  // Sem isso, qualquer um pode injetar leads falsos ou disparar o bot.
+  // Em produção, exige APP_SECRET configurado; sem ele, rejeita tudo.
+  const signature = req.headers['x-hub-signature-256'] || '';
+  const appSecret = process.env.APP_SECRET || '';
+  if (process.env.NODE_ENV === 'production') {
+    if (!appSecret) {
+      console.log('❌ Webhook rejeitado: APP_SECRET não configurado.');
+      return res.sendStatus(500);
+    }
+    const expected = 'sha256=' + crypto
+      .createHmac('sha256', appSecret)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expected);
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      console.log('❌ Webhook rejeitado: assinatura inválida.');
+      return res.sendStatus(403);
+    }
+  }
+
   // Responde rápido para a Meta não reenviar
   res.sendStatus(200);
 
@@ -570,8 +597,13 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// Lista os leads capturados (útil para conferir)
+// Lista os leads capturados — PROTEGIDO por token (só o Tito usa).
+// Envie o header `x-admin-token` com o valor de ADMIN_TOKEN.
 app.get('/leads', (req, res) => {
+  // ── C1: sem ADMIN_TOKEN configurado ou token inválido → 401 ────────────
+  if (!ADMIN_TOKEN || req.headers['x-admin-token'] !== ADMIN_TOKEN) {
+    return res.sendStatus(401);
+  }
   try {
     const leads = JSON.parse(fs.readFileSync(LEADS_FILE, 'utf8') || '[]');
     res.json(leads);
@@ -587,10 +619,16 @@ app.listen(PORT, () => {
   console.log(`   Porta: ${PORT}`);
   console.log(`   Webhook: GET/POST /webhook`);
   console.log(`   Health:  GET /health`);
-  console.log(`   Leads:   GET /leads`);
+  console.log(`   Leads:   GET /leads (protegido por ADMIN_TOKEN)`);
   if (!VERIFY_TOKEN) console.log('   ⚠️  VERIFY_TOKEN não configurado!');
   if (!WHATSAPP_TOKEN) console.log('   ⚠️  WHATSAPP_TOKEN não configurado (modo teste: mensagens só no log).');
   if (!PHONE_NUMBER_ID) console.log('   ⚠️  PHONE_NUMBER_ID não configurado!');
+  if (!ADMIN_TOKEN) console.log('   ⚠️  ADMIN_TOKEN não configurado! GET /leads vai retornar 401 para tudo.');
+  if (process.env.NODE_ENV === 'production' && !process.env.APP_SECRET) {
+    console.log('   ⚠️  APP_SECRET não configurado! POST /webhook vai rejeitar tudo em produção.');
+  }
+  // ── I4: aviso sobre disco efêmero ─────────────────────────────────────
+  console.log('   ⚠️  leads.json está em disco local — o Render APAGA a cada redeploy. Considere migrar para um banco (Neon).');
   console.log('   💬 Bot conversacional inteligente ativo.');
   console.log('');
 });

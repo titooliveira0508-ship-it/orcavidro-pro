@@ -74,7 +74,7 @@ export default function Financeiro({ pedido, aoFechar, aoAtualizar }: Props) {
   }
 
   const campo =
-    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand';
+    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand';
   const rotulo = 'block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1';
 
   return (
@@ -148,7 +148,7 @@ export default function Financeiro({ pedido, aoFechar, aoAtualizar }: Props) {
                   <button
                     onClick={() => excluir(m.id)}
                     aria-label="Excluir movimentação"
-                    className="shrink-0 w-8 h-8 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 font-bold"
+                    className="shrink-0 w-10 h-10 rounded-full text-slate-400 hover:text-red-600 hover:bg-red-50 font-bold"
                   >
                     ×
                   </button>
@@ -165,7 +165,7 @@ export default function Financeiro({ pedido, aoFechar, aoAtualizar }: Props) {
           <div className="flex gap-2">
             <button
               onClick={() => setTipo('entrada')}
-              className={`flex-1 px-3 py-2 rounded-full text-sm font-bold border transition-colors ${
+              className={`flex-1 min-h-[40px] px-3 py-2 rounded-full text-sm font-bold border transition-colors ${
                 tipo === 'entrada'
                   ? 'bg-emerald-600 border-emerald-600 text-white'
                   : 'bg-white border-slate-300 text-slate-600'
@@ -175,7 +175,7 @@ export default function Financeiro({ pedido, aoFechar, aoAtualizar }: Props) {
             </button>
             <button
               onClick={() => setTipo('saida')}
-              className={`flex-1 px-3 py-2 rounded-full text-sm font-bold border transition-colors ${
+              className={`flex-1 min-h-[40px] px-3 py-2 rounded-full text-sm font-bold border transition-colors ${
                 tipo === 'saida'
                   ? 'bg-red-600 border-red-600 text-white'
                   : 'bg-white border-slate-300 text-slate-600'

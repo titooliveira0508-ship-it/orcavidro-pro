@@ -1,0 +1,38 @@
+# ─── OrçaVidro Pro · .gitignore ─────────────────────────────────────────────
+
+# Dependências
+node_modules/
+server/node_modules/
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Variáveis de ambiente (NUNCA commitar segredos!)
+.env
+.env.*
+!.env.example
+server/.env
+server/.env.*
+!server/.env.example
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Dados locais do bot (leads reais — não versionar)
+server/leads.json
+server/state.json
