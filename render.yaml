@@ -1,0 +1,37 @@
+# ─── OrçaVidro Pro · Infraestrutura no Render ─────────────────────────────────
+# Aplica via: Render Dashboard → New → Blueprint → selecione este repo.
+# As variáveis de ambiente do bot (VERIFY_TOKEN etc.) devem ser configuradas
+# no dashboard (não commite segredos!). Veja server/.env.example.
+
+services:
+  # ── App principal (site estático) ──────────────────────────────────────
+  - type: web
+    name: orcavidro-pro
+    runtime: static
+    buildCommand: npm install --include=dev && npm run build
+    staticPublishPath: dist
+    # O app é 100% localStorage — não precisa de variáveis de ambiente.
+
+  # ── Bot de WhatsApp (servidor Node) ────────────────────────────────────
+  - type: web
+    name: orcavidro-pro-bot
+    runtime: node
+    rootDir: server
+    buildCommand: npm install --omit=dev
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Configure os segredos no dashboard (sync: false = manual):
+      - key: VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: APP_SECRET
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      # ⚠️ ATENÇÃO: leads.json fica em disco efêmero — o Render apaga a cada
+      # redeploy. Para produção séria, migre os leads para um banco (Neon).
