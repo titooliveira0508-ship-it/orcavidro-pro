@@ -22,7 +22,7 @@ export default function App() {
       <header className="bg-navy text-white sticky top-0 z-10 shadow-md">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center gap-2.5">
           <img
-            src="/icon-512.png"
+            src="/icon-192.png"
             alt="OrçaVidro Pro"
             className="w-9 h-9 rounded-xl shadow-sm bg-white"
           />

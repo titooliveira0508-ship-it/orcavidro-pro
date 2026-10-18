@@ -89,7 +89,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
   }
 
   const campo =
-    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand';
+    'w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand';
   const rotulo = 'block text-xs font-bold text-slate-600 uppercase tracking-wide mb-1';
 
   return (
@@ -129,7 +129,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
                 <button
                   key={s.id}
                   onClick={() => setSubOpcao(s.id)}
-                  className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                  className={`min-h-[40px] px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
                     subOpcao === s.id
                       ? 'bg-brand border-brand text-white'
                       : 'bg-white border-slate-300 text-slate-600'
@@ -202,7 +202,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
               <button
                 key={a.valor}
                 onClick={() => setAlturaOpcao(a.valor)}
-                className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                className={`min-h-[40px] px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
                   alturaOpcao === a.valor
                     ? 'bg-brand border-brand text-white'
                     : 'bg-white border-slate-300 text-slate-600'
@@ -247,7 +247,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
                   <button
                     key={t.id}
                     onClick={() => setTipoBorda(t.rotulo)}
-                    className={`px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
+                    className={`min-h-[40px] px-3.5 py-2 rounded-full text-sm font-semibold border transition-colors ${
                       tipoBorda === t.rotulo
                         ? 'bg-brand border-brand text-white'
                         : 'bg-white border-slate-300 text-slate-600'
@@ -282,7 +282,7 @@ export default function ItemForm({ categoria, aoAdicionar, aoVoltar }: Props) {
                           total.toFixed(2).replace('.', ',')
                         )
                       }
-                      className="ml-2 px-2.5 py-1 rounded-full bg-brand text-white text-xs font-bold"
+                      className="ml-2 min-h-[40px] px-2.5 py-1 rounded-full bg-brand text-white text-xs font-bold"
                     >
                       Usar valor
                     </button>
