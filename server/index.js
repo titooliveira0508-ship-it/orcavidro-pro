@@ -527,6 +527,90 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, servico: 'orcavidro-pro-bot', timestamp: new Date().toISOString() });
 });
 
+// Página pública de Política de Privacidade (exigida pela Meta pra publicar o app)
+app.get('/privacidade', (req, res) => {
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Política de Privacidade — OrçaVidro Pro</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f4f6f8; color: #1f2937; line-height: 1.65; }
+  .container { max-width: 760px; margin: 0 auto; padding: 32px 20px 48px; }
+  header { background: #0f4c5c; color: #fff; border-radius: 12px; padding: 28px 24px; margin-bottom: 24px; }
+  header h1 { font-size: 1.55rem; line-height: 1.3; margin-bottom: 6px; }
+  header p { opacity: 0.9; font-size: 0.98rem; }
+  section { background: #fff; border-radius: 12px; padding: 22px 24px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  h2 { font-size: 1.12rem; color: #0f4c5c; margin-bottom: 10px; }
+  p, li { font-size: 0.98rem; }
+  ul { padding-left: 20px; margin-top: 6px; }
+  li { margin-bottom: 4px; }
+  footer { text-align: center; color: #6b7280; font-size: 0.88rem; padding: 12px 0 0; }
+  a { color: #0f4c5c; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Política de Privacidade — OrçaVidro Pro</h1>
+    <p>M Oliveira Envidraçamentos · Atendimento via WhatsApp</p>
+  </header>
+
+  <section>
+    <h2>1. Quem somos</h2>
+    <p>O <strong>OrçaVidro Pro</strong> é o atendimento automatizado via WhatsApp da <strong>M Oliveira Envidraçamentos</strong>, vidraçaria localizada no Rio de Janeiro/RJ, especializada em janelas, box, portas, espelhos e guarda-corpos. Esta política explica como tratamos os dados pessoais recebidos por esse atendimento, conforme a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).</p>
+  </section>
+
+  <section>
+    <h2>2. Dados que coletamos</h2>
+    <p>Coletamos apenas os dados que você nos envia durante o atendimento:</p>
+    <ul>
+      <li>Nome;</li>
+      <li>Número de telefone/WhatsApp;</li>
+      <li>Conteúdo das mensagens enviadas ao atendimento, incluindo medidas, endereços de instalação informados por você e fotos enviadas para orçamento;</li>
+      <li>Os dados do orçamento gerado a partir dessas informações.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. Para que usamos os dados</h2>
+    <p>Usamos os dados exclusivamente para:</p>
+    <ul>
+      <li>Elaborar e enviar orçamentos;</li>
+      <li>Registrar as solicitações de atendimento (leads);</li>
+      <li>Responder a você pelo WhatsApp e dar continuidade ao atendimento.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>4. Compartilhamento</h2>
+    <p>As mensagens trafegam pela <strong>Meta Platforms (WhatsApp Business Platform)</strong> e são interpretadas com o apoio de <strong>provedores de inteligência artificial</strong> utilizados para entender as mensagens e montar os orçamentos. Fora isso, <strong>não vendemos nem compartilhamos seus dados pessoais</strong> com terceiros para fins de marketing.</p>
+  </section>
+
+  <section>
+    <h2>5. Armazenamento e segurança</h2>
+    <p>Os dados ficam armazenados nos sistemas do serviço, com acesso restrito ao responsável pelo atendimento. Mantemos os dados apenas pelo tempo necessário ao atendimento e ao cumprimento de obrigações legais.</p>
+  </section>
+
+  <section>
+    <h2>6. Seus direitos (LGPD)</h2>
+    <p>Você pode solicitar, a qualquer momento, o <strong>acesso, a correção, a atualização e a exclusão</strong> dos seus dados pessoais. Basta pedir pelo próprio WhatsApp do atendimento: <strong>(21) 99807-1729</strong>.</p>
+  </section>
+
+  <section>
+    <h2>7. Contato</h2>
+    <p>Qualquer dúvida sobre esta política ou sobre os seus dados, fale com a gente pelo WhatsApp: <strong>(21) 99807-1729</strong>.</p>
+  </section>
+
+  <footer>Última atualização: outubro de 2026.</footer>
+</div>
+</body>
+</html>`);
+});
+
 // Verificação do webhook (a Meta chama isso ao configurar)
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
