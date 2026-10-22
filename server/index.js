@@ -15,7 +15,13 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-app.use(express.json());
+// Captura o corpo RAW para verificar a assinatura da Meta.
+// O HMAC dela é calculado sobre os bytes EXATOS enviados; verificar
+// sobre o JSON remontado pelo Express quebra quando a Meta escapa
+// acentos/emoji (\uXXXX).
+app.use(express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 const PORT = process.env.PORT || 3001;
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || '';
@@ -640,7 +646,7 @@ app.post('/webhook', async (req, res) => {
     }
     const expected = 'sha256=' + crypto
       .createHmac('sha256', appSecret)
-      .update(JSON.stringify(req.body))
+      .update(req.rawBody || Buffer.from(JSON.stringify(req.body)))
       .digest('hex');
     const sigBuf = Buffer.from(signature);
     const expBuf = Buffer.from(expected);
