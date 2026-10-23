@@ -20,6 +20,8 @@
 //      (nome + ideia) e salva o lead básico da LAA-APPS
 //   8) Com a IA "fora do ar" desde o início, cai pro formulário
 //      e o cliente continua sendo atendido
+//   9) Timeout do Gemini → UMA nova tentativa automática e responde;
+//      erro 404 (modelo) NÃO tenta de novo
 //
 // Uso: node teste-conversa-ia.js
 
@@ -367,11 +369,69 @@ async function cenarioFallback() {
   }
 }
 
+// ─── Cenário 5: timeout do Gemini → retry automático (404 não tenta) ──────
+// Processo filho SEM IA_MOCK e com GEMINI_API_KEY falsa: intercepta o
+// axios.post pra simular timeout na 1ª chamada e sucesso na 2ª.
+async function cenarioRetry() {
+  console.log('\n── Cenário 5: retry do Gemini após timeout ──');
+  const base = JSON.stringify(__dirname);
+  const script = `
+    const path = require('path');
+    const axios = require(path.join(${base}, 'node_modules', 'axios'));
+    let chamadas = 0;
+    axios.post = async () => {
+      chamadas++;
+      if (chamadas === 1) {
+        const e = new Error('timeout of 45000ms exceeded');
+        e.code = 'ECONNABORTED';
+        throw e;
+      }
+      return { data: { candidates: [{ content: { parts: [{ text: 'resposta-depois-do-retry' }] } }] } };
+    };
+    const { chamarIA } = require(path.join(${base}, 'ia'));
+    (async () => {
+      const t = await chamarIA({ sistema: 's', mensagens: [{ papel: 'cliente', texto: 'oi' }], json: false });
+      console.log('RETRY_TEXTO:' + t);
+      console.log('RETRY_CHAMADAS:' + chamadas);
+      chamadas = 0;
+      axios.post = async () => {
+        chamadas++;
+        const e = new Error('Request failed with status code 404');
+        e.response = { status: 404, data: { error: 'modelo inexistente' } };
+        throw e;
+      };
+      try {
+        await chamarIA({ sistema: 's', mensagens: [{ papel: 'cliente', texto: 'oi' }], json: false });
+        console.log('QUATROCENTOS:sem-erro');
+      } catch (_) {
+        console.log('QUATROCENTOS_CHAMADAS:' + chamadas);
+      }
+    })().catch((e) => { console.log('FALHA_GERAL:' + e.message); process.exit(2); });
+  `;
+  const dirFilho = fs.mkdtempSync(path.join(os.tmpdir(), 'orcavidro-retry-'));
+  const arq = path.join(dirFilho, 'filho.js');
+  fs.writeFileSync(arq, script);
+  const saida = await new Promise((resolve) => {
+    const p = spawn('node', [arq], {
+      cwd: __dirname,
+      env: { ...process.env, GEMINI_API_KEY: 'chave-fake', OPENAI_API_KEY: '', IA_MOCK: '' },
+    });
+    let s = '';
+    p.stdout.on('data', (d) => { s += d.toString(); });
+    p.stderr.on('data', (d) => { s += d.toString(); });
+    p.on('close', () => resolve(s));
+  });
+  ok(saida.includes('RETRY_TEXTO:resposta-depois-do-retry'), 'timeout do Gemini → retry automático responde');
+  ok(saida.includes('RETRY_CHAMADAS:2'), 'exatamente 1 retry após o timeout (2 chamadas no total)');
+  ok(saida.includes('QUATROCENTOS_CHAMADAS:1'), 'erro 404 NÃO tenta de novo (cai pro próximo provedor)');
+}
+
 (async () => {
   await cenarioIA();
   await cenarioApps();
   await cenarioFallbackApps();
   await cenarioFallback();
+  await cenarioRetry();
   console.log(falhas === 0 ? '\n🎉 TODOS OS TESTES PASSARAM' : `\n⚠️  ${falhas} TESTE(S) FALHARAM`);
   process.exit(falhas === 0 ? 0 : 1);
 })();
