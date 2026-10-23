@@ -4,13 +4,21 @@
 // assinatura válida (HMAC com APP_SECRET de teste).
 //
 // Verifica:
+//   0) Prompt de sistema: saudação oficial do GRUPO OLIVEIRA (retribuir
+//      o cumprimento), pergunta-guia educada dos dois ramos, os dois
+//      ramos de coleta e a regra anti-preço valendo pros dois
 //   1) GET /health responde ok
 //   2) Assinatura inválida → 403
-//   3) Conversa natural de 5 mensagens: IA pede nome → endereço →
+//   3) Conversa natural (vidraçaria): IA pede nome → endereço →
 //      salva o lead no MESMO formato do formulário → confirma
 //   4) Nenhuma resposta contém preço/valor
 //   5) GET /leads exige ADMIN_TOKEN e devolve o lead salvo
-//   6) Com a IA "fora do ar" (IA_MOCK_FALHAR=1), cai pro formulário
+//   6) Conversa do ramo APPS: abertura só com "Boa noite" → saudação do
+//      Grupo Oliveira + pergunta-guia → coleta nome/contato → lead
+//      salvo com area 'LAA-APPS' e servico "aplicativo para lanchonete"
+//   7) IA cai NO MEIO do ramo apps → atendimento básico educado assume
+//      (nome + ideia) e salva o lead básico da LAA-APPS
+//   8) Com a IA "fora do ar" desde o início, cai pro formulário
 //      e o cliente continua sendo atendido
 //
 // Uso: node teste-conversa-ia.js
@@ -21,7 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { contemPreco, parseJSONDefensivo } = require('./ia');
+const { contemPreco, parseJSONDefensivo, montarSistemaConversa } = require('./ia');
 
 const APP_SECRET = 'segredo-de-teste';
 const ADMIN_TOKEN = 'admin-de-teste';
@@ -40,6 +48,50 @@ ok(contemPreco('O Tito prepara o orçamento e te retorna com a proposta') === fa
 ok(parseJSONDefensivo('```json\n{"nome":"Ana"}\n```')?.nome === 'Ana', 'parse de JSON com cerca de código');
 ok(parseJSONDefensivo('não é json') === null, 'parse defensivo devolve null em lixo');
 
+// ─── Prompt de sistema: saudação do Grupo Oliveira + dois ramos ─────────────
+console.log('\n── Prompt de sistema (abertura, sem ramo definido) ──');
+const dadosVaziosIA = { nome: '', endereco: '', servico: '', detalhes: '' };
+const dadosVaziosApps = { nome: '', tipo: '', negocio: '', contato: '', detalhes: '' };
+const promptInicio = montarSistemaConversa({
+  ramo: '',
+  inicio: true,
+  dadosIA: dadosVaziosIA,
+  dadosApps: dadosVaziosApps,
+  faltam: ['nome'],
+  confirmacao: false,
+});
+console.log(promptInicio);
+console.log('── fim do prompt ──');
+ok(promptInicio.includes('GRUPO OLIVEIRA'), 'prompt apresenta o Grupo Oliveira');
+ok(/retribua o cumprimento/i.test(promptInicio), 'prompt manda retribuir a saudação do cliente');
+ok(
+  promptInicio.includes('envidraçamento 🪟') && promptInicio.includes('aplicativo ou site para o seu negócio'),
+  'prompt tem a pergunta-guia dos dois ramos'
+);
+ok(
+  /Nunca abra a conversa com essa pergunta de forma seca/.test(promptInicio),
+  'pergunta-guia proibida como abertura seca (só com saudação)'
+);
+ok(
+  promptInicio.includes('RAMO ENVIDRAÇAMENTO') && promptInicio.includes('RAMO APLICATIVOS E SITES'),
+  'prompt descreve os dois ramos de coleta'
+);
+ok(
+  /REGRA ABSOLUTA/.test(promptInicio) && /NUNCA fala preço/.test(promptInicio),
+  'regra anti-preço presente no prompt'
+);
+ok(/nem de desenvolvimento de aplicativo/.test(promptInicio), 'anti-preço cobre desenvolvimento de app/site');
+ok(promptInicio.includes('ramo: (indefinido)') && promptInicio.includes('inicio: sim'), 'marcadores de estado no prompt');
+const promptApps = montarSistemaConversa({
+  ramo: 'laaapps',
+  inicio: false,
+  dadosIA: dadosVaziosIA,
+  dadosApps: { ...dadosVaziosApps, nome: 'Ana Paula', tipo: 'aplicativo', negocio: 'lanchonete' },
+  faltam: ['contato'],
+  confirmacao: false,
+});
+ok(promptApps.includes('ramo: laaapps') && promptApps.includes('faltam: contato'), 'prompt do ramo apps carrega ramo/faltam');
+
 // ─── Sobe o servidor numa pasta temporária ──────────────────────────────────
 function prepararPasta() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orcavidro-teste-'));
@@ -50,8 +102,22 @@ function prepararPasta() {
   return dir;
 }
 
-function subirServidor(porta, envExtra) {
-  const dir = prepararPasta();
+function subirServidor(porta, envExtra, dirExistente) {
+  let dir = dirExistente;
+  if (dir) {
+    // Reaproveita a pasta (state.json/leads.json persistem entre os dois
+    // servidores); só atualiza o código e garante o node_modules.
+    for (const f of ['index.js', 'ia.js', 'package.json']) {
+      fs.copyFileSync(path.join(__dirname, f), path.join(dir, f));
+    }
+    try {
+      fs.symlinkSync(path.join(__dirname, 'node_modules'), path.join(dir, 'node_modules'), 'dir');
+    } catch (_) {
+      /* symlink já existe */
+    }
+  } else {
+    dir = prepararPasta();
+  }
   const proc = spawn('node', ['index.js'], {
     cwd: dir,
     env: {
@@ -170,9 +236,121 @@ async function cenarioIA() {
   }
 }
 
-// ─── Cenário 2: IA fora do ar → formulário ──────────────────────────────────
+// ─── Cenário 2: ramo aplicativos/sites (Grupo Oliveira) ─────────────────────
+async function cenarioApps() {
+  console.log('\n── Cenário 2: conversa do ramo apps (mock) ──');
+  const TEL = '5521999990004';
+  const { proc, getLog } = subirServidor(3459, {});
+  try {
+    ok(await esperar(() => getLog().includes('no ar!'), 8000, 'boot'), 'servidor subiu');
+
+    // 1) só "Boa noite" → saudação oficial do Grupo Oliveira + pergunta-guia
+    await enviarMensagem(3459, TEL, 'Boa noite', 'wamid.b1');
+    ok(
+      await esperar(() => getLog().includes('Grupo Oliveira'), 6000, 'saudação do grupo'),
+      'abertura retribui "Boa noite" e apresenta o Grupo Oliveira'
+    );
+    ok(
+      await esperar(() => getLog().includes('envidraçamento 🪟'), 4000, 'pergunta-guia'),
+      'pergunta-guia educada (envidraçamento ou aplicativo/site)'
+    );
+
+    // 2) cliente diz o que quer → ramo apps identificado, sem repetir a guia
+    await enviarMensagem(3459, TEL, 'Quero um aplicativo pra minha lanchonete', 'wamid.b2');
+    ok(
+      await esperar(() => getLog().includes('se chama'), 6000, 'IA apps pede nome'),
+      'ramo apps: IA pede o nome'
+    );
+
+    // 3) nome → 4) contato → lead salvo como LAA-APPS
+    await enviarMensagem(3459, TEL, 'Meu nome é Ana Paula', 'wamid.b3');
+    ok(
+      await esperar(() => getLog().includes('contato'), 6000, 'IA apps pede contato'),
+      'ramo apps: IA pede o contato de retorno'
+    );
+    await enviarMensagem(3459, TEL, 'Pode ser nesse WhatsApp mesmo', 'wamid.b4');
+    ok(
+      await esperar(() => getLog().includes('NOVO LEAD RECEBIDO'), 6000, 'lead apps salvo'),
+      'lead de apps salvo ao completar os dados'
+    );
+
+    const leads = await fetch('http://127.0.0.1:3459/leads', {
+      headers: { 'x-admin-token': ADMIN_TOKEN },
+    }).then((r) => r.json());
+    const lead = leads.find((l) => l.telefone === TEL);
+    ok(!!lead, 'lead de apps aparece no GET /leads');
+    if (lead) {
+      ok(lead.area === 'LAA-APPS', `lead.area = "${lead.area}"`);
+      ok(lead.nome === 'Ana Paula', `lead.nome = "${lead.nome}"`);
+      ok(
+        /aplicativo/i.test(lead.servico) && /lanchonete/i.test(lead.servico),
+        `lead.servico = "${lead.servico}"`
+      );
+    }
+  } finally {
+    proc.kill('SIGTERM');
+  }
+}
+
+// ─── Cenário 3: IA cai NO MEIO do ramo apps → atendimento básico ────────────
+async function cenarioFallbackApps() {
+  console.log('\n── Cenário 3: IA cai no meio do ramo apps → atendimento básico ──');
+  const TEL = '5521999990003';
+  const s1 = subirServidor(3460, {});
+  const dir = s1.dir;
+  try {
+    ok(await esperar(() => s1.getLog().includes('no ar!'), 8000, 'boot'), 'servidor subiu (IA ok)');
+    await enviarMensagem(3460, TEL, 'Boa noite', 'wamid.a1');
+    ok(
+      await esperar(() => s1.getLog().includes('Grupo Oliveira'), 6000, 'saudação'),
+      'abertura com a saudação do Grupo Oliveira'
+    );
+    await enviarMensagem(3460, TEL, 'Quero um aplicativo pra minha lanchonete', 'wamid.a2');
+    ok(
+      await esperar(() => s1.getLog().includes('se chama'), 6000, 'IA apps pede nome'),
+      'ramo apps identificado antes da queda'
+    );
+  } finally {
+    s1.proc.kill('SIGTERM');
+  }
+  await dormir(600);
+
+  // Reinicia na MESMA pasta (estado persiste), agora com a IA fora do ar.
+  const s2 = subirServidor(3461, { IA_MOCK_FALHAR: '1' }, dir);
+  try {
+    ok(await esperar(() => s2.getLog().includes('no ar!'), 8000, 'boot'), 'servidor reiniciou (IA fora do ar)');
+    await enviarMensagem(3461, TEL, 'Meu nome é Ana Paula', 'wamid.a3');
+    ok(
+      await esperar(() => s2.getLog().includes('IA indisponível'), 6000, 'log de fallback'),
+      'log registra a queda da IA'
+    );
+    ok(
+      await esperar(() => /Texto:.*instabilidade/s.test(s2.getLog()), 6000, 'mensagem educada'),
+      'atendimento básico de apps responde com educação (sem ficar mudo)'
+    );
+    await enviarMensagem(3461, TEL, 'Ana Paula', 'wamid.a4');
+    ok(
+      await esperar(() => s2.getLog().includes('ideia'), 6000, 'form apps pede a ideia'),
+      'atendimento básico pede a ideia/projeto'
+    );
+    await enviarMensagem(3461, TEL, 'um aplicativo pra minha lanchonete', 'wamid.a5');
+    ok(
+      await esperar(() => s2.getLog().includes('NOVO LEAD RECEBIDO'), 6000, 'lead básico salvo'),
+      'lead básico de apps salvo pelo fallback'
+    );
+    const leads = await fetch('http://127.0.0.1:3461/leads', {
+      headers: { 'x-admin-token': ADMIN_TOKEN },
+    }).then((r) => r.json());
+    const lead = leads.find((l) => l.telefone === TEL);
+    ok(!!lead && lead.area === 'LAA-APPS', `lead do fallback com area "LAA-APPS" (${lead && lead.area})`);
+  } finally {
+    s2.proc.kill('SIGTERM');
+  }
+}
+
+// ─── Cenário 4: IA fora do ar desde o início → formulário ───────────────────
 async function cenarioFallback() {
-  console.log('\n── Cenário 2: IA fora do ar → formulário ──');
+  console.log('\n── Cenário 4: IA fora do ar → formulário ──');
   const { proc, getLog } = subirServidor(3458, { IA_MOCK_FALHAR: '1' });
   try {
     ok(await esperar(() => getLog().includes('no ar!'), 8000, 'boot'), 'servidor subiu');
@@ -191,6 +369,8 @@ async function cenarioFallback() {
 
 (async () => {
   await cenarioIA();
+  await cenarioApps();
+  await cenarioFallbackApps();
   await cenarioFallback();
   console.log(falhas === 0 ? '\n🎉 TODOS OS TESTES PASSARAM' : `\n⚠️  ${falhas} TESTE(S) FALHARAM`);
   process.exit(falhas === 0 ? 0 : 1);
