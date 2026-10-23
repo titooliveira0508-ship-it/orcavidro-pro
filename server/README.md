@@ -25,6 +25,24 @@ Comandos: o cliente pode escrever **recomeçar** a qualquer momento para reinici
 | `WHATSAPP_TOKEN`  | Token permanente do WhatsApp Cloud API                         | Sim         |
 | `PHONE_NUMBER_ID` | ID do número de telefone (WhatsApp Manager → número)           | Sim         |
 | `PORT`            | Porta do servidor (padrão: `3001`)                             | Não         |
+| `GEMINI_API_KEY`  | Chave do Gemini — ativa a **conversa com IA**                  | Sim p/ IA   |
+| `OPENAI_API_KEY`  | Chave da OpenAI — fallback extra da IA (gpt-4o-mini)           | Não         |
+| `CONVERSA_IA`     | `off` desliga a IA e usa só o formulário                       | Não         |
+
+## Conversa com IA
+
+O atendimento principal é uma **conversa livre com IA** (`server/ia.js`):
+o cliente fala do jeito dele e a IA coleta nome, endereço e serviço com
+naturalidade, salvando o lead no mesmo formato de sempre.
+
+- **Ordem de fallback:** Gemini → OpenAI (só se `OPENAI_API_KEY` existir) →
+  formulário atual. Se a IA cair, o cliente continua atendido — nunca mudo.
+- **Regra de ouro mantida:** a IA **nunca** passa preço/valor/prazo. Além da
+  instrução no prompt, toda resposta passa por uma trava anti-preço antes
+  de ser enviada.
+- **Teste local:** `node teste-conversa-ia.js` sobe o servidor com a IA
+  mockada (`IA_MOCK=1`, só para testes — nunca usar em produção) e simula
+  uma conversa completa via webhook assinado.
 
 No Render, cadastre essas variáveis em **Environment** do serviço.
 

@@ -7,12 +7,15 @@
 //   VERIFY_TOKEN    – token de verificação do webhook na Meta
 //   WHATSAPP_TOKEN  – token permanente da API do WhatsApp Cloud
 //   PHONE_NUMBER_ID – ID do número de telefone no WhatsApp Cloud API
+//   GEMINI_API_KEY  – chave do Gemini (conversa com IA, ver server/ia.js)
+//   OPENAI_API_KEY  – chave da OpenAI (opcional; fallback extra da IA)
 //   PORT            – porta do servidor (padrão 3001)
 
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { criarConversaIA } = require('./ia');
 
 const app = express();
 // Captura o corpo RAW para verificar a assinatura da Meta.
@@ -330,6 +333,70 @@ function salvarLead(telefone, dados) {
   console.log('');
 }
 
+// ─── Conversa com IA (caminho principal) ────────────────────────────────────
+// A conversa natural com IA fica no server/ia.js (Gemini → OpenAI → erro).
+// Se a IA falhar, o despachante abaixo cai para o formulário atual
+// (processarMensagem), sem mudar o comportamento dele.
+const conversaIA = criarConversaIA({ enviarWhatsApp, salvarLead, getEstado, salvarEstados });
+
+// Transfere o que a IA já coletou para os campos do formulário e marca a
+// conversa para seguir no formulário dali em diante.
+function cairParaFormulario(telefone) {
+  const estado = getEstado(telefone);
+  estado.modoFormulario = true;
+  const d = estado.dadosIA || {};
+  if (d.nome) estado.nome = d.nome;
+  if (d.endereco) estado.endereco = d.endereco;
+  if (d.servico) estado.servico = d.servico;
+  estado.area = 'vidracaria';
+  salvarEstados();
+  return estado;
+}
+
+// Despachante: tenta a IA; qualquer falha → formulário, sem ficar mudo.
+async function processarMensagemPrincipal(telefone, texto) {
+  const estado = getEstado(telefone);
+  const t = (texto || '').trim();
+  const ehReset = /^(cancelar|recomeçar|recomecar|reiniciar|menu)$/i.test(t);
+
+  // Comandos de reinício, conversa já concluída, conversa que já caiu pro
+  // formulário ou IA desligada/sem chave → comportamento atual (formulário).
+  if (!conversaIA.ativa || ehReset || estado.etapa === 'concluido' || estado.modoFormulario) {
+    return processarMensagem(telefone, texto);
+  }
+
+  try {
+    await conversaIA.processarComIA(telefone, t);
+  } catch (e) {
+    console.log(`⚠️  IA indisponível (${e.message}). Caindo para o formulário nesta conversa.`);
+    const est = cairParaFormulario(telefone);
+    if (est.nome && est.endereco && est.servico) {
+      // Já tinha tudo: salva o lead e confirma, igual ao formulário faria.
+      est.etapa = 'concluido';
+      salvarEstados();
+      salvarLead(telefone, est);
+      await enviarWhatsApp(
+        telefone,
+        `✅ *Dados confirmados!*\n\n👤 ${est.nome}\n📍 ${est.endereco}\n🔧 ${est.servico}\n\n` +
+          msgVariada(telefone, MSGS.confirmaVidracaria)
+      );
+    } else if (est.nome && est.endereco) {
+      est.etapa = 'vid_servico';
+      salvarEstados();
+      await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeServico));
+    } else if (est.nome) {
+      est.etapa = 'vid_endereco';
+      salvarEstados();
+      await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeEndereco));
+    } else {
+      // Nada coletado ainda: o formulário interpreta a própria mensagem.
+      est.etapa = 'ouvindo';
+      salvarEstados();
+      await processarMensagem(telefone, texto);
+    }
+  }
+}
+
 // ─── Processamento inteligente da conversa ──────────────────────────────────
 // O cliente fala livremente; o bot detecta o nicho e conduz com mensagens variadas.
 async function processarMensagem(telefone, textoRecebido) {
@@ -632,6 +699,20 @@ app.get('/webhook', (req, res) => {
   }
 });
 
+// Deduplicação por ID da mensagem (wamid): quando a Meta reenvia o mesmo
+// webhook (retry), o ID se repete — ignoramos para não responder em dobro.
+const idsVistos = new Map(); // wamid -> timestamp
+function idJaVisto(id) {
+  if (!id) return false;
+  const agora = Date.now();
+  for (const [k, ts] of idsVistos) {
+    if (agora - ts > 10 * 60 * 1000) idsVistos.delete(k);
+  }
+  if (idsVistos.has(id)) return true;
+  idsVistos.set(id, agora);
+  return false;
+}
+
 // Recebimento de mensagens
 app.post('/webhook', async (req, res) => {
   // ── C2: verifica assinatura da Meta (X-Hub-Signature-256) ──────────────
@@ -667,6 +748,10 @@ app.post('/webhook', async (req, res) => {
 
     const mensagens = value.messages || [];
     for (const msg of mensagens) {
+      if (idJaVisto(msg.id)) {
+        console.log(`🔁 Webhook duplicado ignorado (id ${msg.id})`);
+        continue;
+      }
       const telefone = msg.from; // ex.: "5521999999999"
       const tipo = msg.type;
       const texto = tipo === 'text' ? msg.text?.body : '';
@@ -680,7 +765,7 @@ app.post('/webhook', async (req, res) => {
       }
 
       console.log(`📩 Mensagem de ${telefone}: ${texto}`);
-      await processarMensagem(telefone, texto);
+      await processarMensagemPrincipal(telefone, texto);
     }
   } catch (e) {
     console.log('❌ Erro ao processar webhook:', e.message);
@@ -720,5 +805,10 @@ app.listen(PORT, () => {
   // ── I4: aviso sobre disco efêmero ─────────────────────────────────────
   console.log('   ⚠️  leads.json está em disco local — o Render APAGA a cada redeploy. Considere migrar para um banco (Neon).');
   console.log('   💬 Bot conversacional inteligente ativo.');
+  if (conversaIA.ativa) {
+    console.log('   🤖 Conversa com IA ativa (Gemini' + (process.env.OPENAI_API_KEY ? ' + fallback OpenAI' : '') + '; formulário é o reserva).');
+  } else {
+    console.log('   💬 Conversa com IA desligada (sem GEMINI_API_KEY ou CONVERSA_IA=off) — usando só o formulário.');
+  }
   console.log('');
 });
