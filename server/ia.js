@@ -20,7 +20,12 @@
 //      nos outros projetos do Tito.
 //   2) OpenAI gpt-4o-mini (OPENAI_API_KEY) — SÓ entra se a variável existir
 //      E o Gemini falhar.
-//   3) Se a IA falhar/indisponível → quem chama (index.js) cai para o
+//   3) Invision (INVISION_API_KEY) — gateway compatível com OpenAI, camada
+//      extra de fallback: SÓ entra se a variável existir E os anteriores
+//      falharem. (Entrou porque o gemini-3.8-flash, em produção, aceita a
+//      chamada mas nunca responde — timeout atrás de timeout e o bot caía
+//      pro formulário seco; a Invision responde em segundos.)
+//   4) Se a IA falhar/indisponível → quem chama (index.js) cai para o
 //      formulário atual. O robô NUNCA fica mudo.
 //
 // REGRA DE OURO: a IA nunca passa preço/valor/estimativa/prazo fechado.
@@ -32,6 +37,8 @@
 //   GEMINI_MODEL    – modelo Gemini (padrão: gemini-3.8-flash)
 //   OPENAI_API_KEY  – chave da OpenAI (opcional; ativa o fallback extra)
 //   OPENAI_MODEL    – modelo OpenAI (padrão: gpt-4o-mini)
+//   INVISION_API_KEY – chave da Invision (opcional; ativa o fallback extra)
+//   INVISION_MODEL  – modelo Invision (padrão: openai/gpt-6-astra-invision)
 //   CONVERSA_IA=off – desliga a IA e usa só o formulário
 //   IA_MOCK=1       – provedor falso determinístico, SÓ para testes locais.
 //                     Nunca configurar em produção.
@@ -40,8 +47,10 @@ const axios = require('axios');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const INVISION_API_KEY = process.env.INVISION_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const INVISION_MODEL = process.env.INVISION_MODEL || 'openai/gpt-6-astra-invision';
 const IA_MOCK = process.env.IA_MOCK === '1';
 // Timeout das chamadas aos provedores de IA. 20s era pouco pro Gemini
 // em produção (Render): quase toda mensagem estourava o prazo e o bot
@@ -49,7 +58,8 @@ const IA_MOCK = process.env.IA_MOCK === '1';
 const IA_TIMEOUT_MS = 45000;
 
 const IA_ATIVA =
-  process.env.CONVERSA_IA !== 'off' && (IA_MOCK || !!GEMINI_API_KEY || !!OPENAI_API_KEY);
+  process.env.CONVERSA_IA !== 'off' &&
+  (IA_MOCK || !!GEMINI_API_KEY || !!OPENAI_API_KEY || !!INVISION_API_KEY);
 
 // ─── Provedores ─────────────────────────────────────────────────────────────
 // Contrato: chamarIA({ sistema, mensagens, json }) → texto da resposta.
@@ -100,6 +110,31 @@ async function chamarOpenAI({ sistema, mensagens, json }) {
   });
   const texto = (resp.data?.choices?.[0]?.message?.content || '').trim();
   if (!texto) throw new Error('OpenAI retornou resposta vazia');
+  return texto;
+}
+
+// Invision: gateway compatível com a API da OpenAI — mesmo formato de
+// chamada/resposta do chamarOpenAI, muda só o endereço, a chave e o modelo.
+async function chamarInvision({ sistema, mensagens, json }) {
+  const body = {
+    model: INVISION_MODEL,
+    temperature: 0.6,
+    max_tokens: 600,
+    messages: [
+      { role: 'system', content: sistema },
+      ...mensagens.map((m) => ({
+        role: m.papel === 'assistente' ? 'assistant' : 'user',
+        content: m.texto,
+      })),
+    ],
+  };
+  if (json) body.response_format = { type: 'json_object' };
+  const resp = await axios.post('https://invision.dreamvision.com.br/v1/chat/completions', body, {
+    headers: { Authorization: `Bearer ${INVISION_API_KEY}`, 'Content-Type': 'application/json' },
+    timeout: IA_TIMEOUT_MS,
+  });
+  const texto = (resp.data?.choices?.[0]?.message?.content || '').trim();
+  if (!texto) throw new Error('Invision retornou resposta vazia');
   return texto;
 }
 
@@ -260,6 +295,16 @@ async function chamarIA(args) {
       const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
       erros.push(`openai: ${det}`);
       console.log('⚠️  OpenAI falhou:', det);
+    }
+  }
+  if (INVISION_API_KEY) {
+    try {
+      console.log('↪️  Tentando fallback Invision…');
+      return await chamarInvision(args);
+    } catch (e) {
+      const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
+      erros.push(`invision: ${det}`);
+      console.log('⚠️  Invision falhou:', det);
     }
   }
   throw new Error('IA indisponível (' + (erros.join(' | ') || 'nenhum provedor configurado') + ')');
@@ -591,6 +636,7 @@ module.exports = {
   IA_ATIVA,
   IA_TIMEOUT_MS,
   GEMINI_MODEL,
+  INVISION_MODEL,
   ehErroRetentavel,
   chamarIA,
 };
