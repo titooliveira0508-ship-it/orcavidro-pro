@@ -20,6 +20,8 @@
 //      (nome + ideia) e salva o lead básico da LAA-APPS
 //   8) Com a IA "fora do ar" desde o início, cai pro formulário
 //      e o cliente continua sendo atendido
+//   9) Timeout do Gemini → exatamente 1 nova tentativa antes de
+//      acertar; erro 4xx (404) não retenta e cai pro próximo provedor
 //
 // Uso: node teste-conversa-ia.js
 
@@ -29,7 +31,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const { contemPreco, parseJSONDefensivo, montarSistemaConversa } = require('./ia');
+const {
+  contemPreco,
+  parseJSONDefensivo,
+  montarSistemaConversa,
+  IA_TIMEOUT_MS,
+  GEMINI_MODEL,
+  ehErroRetentavel,
+} = require('./ia');
 
 const APP_SECRET = 'segredo-de-teste';
 const ADMIN_TOKEN = 'admin-de-teste';
@@ -47,6 +56,21 @@ ok(contemPreco('custa uns 900 reais') === true, 'trava anti-preço pega "custa 9
 ok(contemPreco('O Tito prepara o orçamento e te retorna com a proposta') === false, 'trava anti-preço não bloqueia texto seguro');
 ok(parseJSONDefensivo('```json\n{"nome":"Ana"}\n```')?.nome === 'Ana', 'parse de JSON com cerca de código');
 ok(parseJSONDefensivo('não é json') === null, 'parse defensivo devolve null em lixo');
+ok(IA_TIMEOUT_MS === 45000, 'timeout das chamadas de IA é 45000ms');
+ok(
+  GEMINI_MODEL === (process.env.GEMINI_MODEL || 'gemini-3.8-flash'),
+  `modelo padrão do Gemini é gemini-3.8-flash (atual: ${GEMINI_MODEL})`
+);
+ok(ehErroRetentavel(new Error('timeout of 45000ms exceeded')) === true, 'timeout é erro retentável');
+ok(ehErroRetentavel(new Error('Network Error')) === true, 'erro de rede (sem resposta) é retentável');
+ok(
+  ehErroRetentavel({ message: 'Request failed with status code 503', response: { status: 503 } }) === true,
+  'erro 5xx é retentável'
+);
+ok(
+  ehErroRetentavel({ message: 'Request failed with status code 404', response: { status: 404 } }) === false,
+  'erro 404 (4xx) NÃO é retentável'
+);
 
 // ─── Prompt de sistema: saudação do Grupo Oliveira + dois ramos ─────────────
 console.log('\n── Prompt de sistema (abertura, sem ramo definido) ──');
@@ -179,6 +203,75 @@ async function enviarMensagem(porta, telefone, texto, id, secret = APP_SECRET) {
     body,
   });
   return resp.status;
+}
+
+// ─── Nova tentativa do Gemini após timeout (axios stubado) ──────────────────
+// chamarIA não é exercitado pelo mock (IA_MOCK atalha antes do provedor
+// real), então aqui o axios é stubado e o módulo é recarregado com uma
+// chave de teste: timeout na 1ª chamada, sucesso na 2ª.
+async function testarRetentativaGemini() {
+  console.log('\n── Nova tentativa do Gemini após timeout ──');
+  const axios = require('axios');
+  const postOriginal = axios.post;
+  const envAnterior = {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    IA_MOCK: process.env.IA_MOCK,
+  };
+  try {
+    let tentativas = 0;
+    axios.post = async () => {
+      tentativas++;
+      if (tentativas === 1) {
+        const erro = new Error('timeout of 45000ms exceeded');
+        erro.code = 'ECONNABORTED';
+        throw erro;
+      }
+      return {
+        data: { candidates: [{ content: { parts: [{ text: 'Oi! 😊 Sou o assistente do Grupo Oliveira.' }] } }] },
+      };
+    };
+    process.env.GEMINI_API_KEY = 'chave-de-teste-retry';
+    process.env.OPENAI_API_KEY = '';
+    process.env.IA_MOCK = '';
+    delete require.cache[require.resolve('./ia')];
+    const iaRetry = require('./ia');
+    const texto = await iaRetry.chamarIA({
+      sistema: 'teste',
+      mensagens: [{ papel: 'cliente', texto: 'oi' }],
+      json: false,
+    });
+    ok(tentativas === 2, `timeout do Gemini dispara exatamente 1 nova tentativa (tentativas=${tentativas})`);
+    ok(/Grupo Oliveira/.test(texto), 'resposta da 2ª tentativa do Gemini é aproveitada');
+
+    // Erro 404 NÃO retenta: cai direto pro próximo provedor (aqui nenhum).
+    let tentativas404 = 0;
+    axios.post = async () => {
+      tentativas404++;
+      const erro = new Error('Request failed with status code 404');
+      erro.response = { status: 404, data: { error: { message: 'model not found' } } };
+      throw erro;
+    };
+    let lancou404 = false;
+    try {
+      await iaRetry.chamarIA({
+        sistema: 'teste',
+        mensagens: [{ papel: 'cliente', texto: 'oi' }],
+        json: false,
+      });
+    } catch (_) {
+      lancou404 = true;
+    }
+    ok(tentativas404 === 1, `erro 404 do Gemini NÃO retenta (tentativas=${tentativas404})`);
+    ok(lancou404, 'sem outro provedor, erro 404 do Gemini propaga como IA indisponível');
+  } finally {
+    axios.post = postOriginal;
+    for (const [chave, valor] of Object.entries(envAnterior)) {
+      if (valor === undefined) delete process.env[chave];
+      else process.env[chave] = valor;
+    }
+    delete require.cache[require.resolve('./ia')];
+  }
 }
 
 // ─── Cenário 1: conversa com IA ─────────────────────────────────────────────
@@ -368,6 +461,7 @@ async function cenarioFallback() {
 }
 
 (async () => {
+  await testarRetentativaGemini();
   await cenarioIA();
   await cenarioApps();
   await cenarioFallbackApps();

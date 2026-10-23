@@ -29,7 +29,7 @@
 //
 // Variáveis de ambiente:
 //   GEMINI_API_KEY  – chave do Gemini (obrigatória p/ IA, sem ela = formulário)
-//   GEMINI_MODEL    – modelo Gemini (padrão: gemini-2.0-flash)
+//   GEMINI_MODEL    – modelo Gemini (padrão: gemini-3.8-flash)
 //   OPENAI_API_KEY  – chave da OpenAI (opcional; ativa o fallback extra)
 //   OPENAI_MODEL    – modelo OpenAI (padrão: gpt-4o-mini)
 //   CONVERSA_IA=off – desliga a IA e usa só o formulário
@@ -40,9 +40,13 @@ const axios = require('axios');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const IA_MOCK = process.env.IA_MOCK === '1';
+// Timeout das chamadas aos provedores de IA. 20s era pouco pro Gemini
+// em produção (Render): quase toda mensagem estourava o prazo e o bot
+// caía pro formulário seco. 45s dá folga sem deixar o cliente preso.
+const IA_TIMEOUT_MS = 45000;
 
 const IA_ATIVA =
   process.env.CONVERSA_IA !== 'off' && (IA_MOCK || !!GEMINI_API_KEY || !!OPENAI_API_KEY);
@@ -67,7 +71,7 @@ async function chamarGemini({ sistema, mensagens, json }) {
     },
     {
       headers: { 'x-goog-api-key': GEMINI_API_KEY, 'Content-Type': 'application/json' },
-      timeout: 20000,
+      timeout: IA_TIMEOUT_MS,
     }
   );
   const parts = resp.data?.candidates?.[0]?.content?.parts || [];
@@ -92,7 +96,7 @@ async function chamarOpenAI({ sistema, mensagens, json }) {
   if (json) body.response_format = { type: 'json_object' };
   const resp = await axios.post('https://api.openai.com/v1/chat/completions', body, {
     headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    timeout: 20000,
+    timeout: IA_TIMEOUT_MS,
   });
   const texto = (resp.data?.choices?.[0]?.message?.content || '').trim();
   if (!texto) throw new Error('OpenAI retornou resposta vazia');
@@ -211,6 +215,16 @@ function provedorMock({ mensagens, json }) {
   return 'Perfeito, já anotei aqui! ✅';
 }
 
+// Falha que vale UMA nova tentativa no Gemini: timeout, erro de rede
+// (sem resposta) ou erro 5xx do servidor. Erro 4xx (ex.: 404 de modelo
+// aposentado) NÃO adianta repetir — cai direto pro próximo provedor.
+function ehErroRetentavel(e) {
+  const texto = `${(e && e.message) || ''} ${(e && e.code) || ''}`;
+  if (/timeout/i.test(texto)) return true;
+  if (!e || !e.response) return true;
+  return typeof e.response.status === 'number' && e.response.status >= 500;
+}
+
 async function chamarIA(args) {
   if (IA_MOCK) {
     // Guarda o sistema p/ o mock conseguir montar a resposta de conversa.
@@ -223,8 +237,19 @@ async function chamarIA(args) {
       return await chamarGemini(args);
     } catch (e) {
       const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
-      erros.push(`gemini: ${det}`);
       console.log('⚠️  Gemini falhou:', det);
+      if (ehErroRetentavel(e)) {
+        console.log('↪️  Tentando o Gemini novamente…');
+        try {
+          return await chamarGemini(args);
+        } catch (e2) {
+          const det2 = e2.response?.data ? JSON.stringify(e2.response.data).slice(0, 200) : e2.message;
+          erros.push(`gemini: ${det2}`);
+          console.log('⚠️  Gemini falhou:', det2);
+        }
+      } else {
+        erros.push(`gemini: ${det}`);
+      }
     }
   }
   if (OPENAI_API_KEY) {
@@ -564,4 +589,8 @@ module.exports = {
   parseJSONDefensivo,
   montarSistemaConversa,
   IA_ATIVA,
+  IA_TIMEOUT_MS,
+  GEMINI_MODEL,
+  ehErroRetentavel,
+  chamarIA,
 };
