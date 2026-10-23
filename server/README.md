@@ -32,11 +32,33 @@ Comandos: o cliente pode escrever **recomeçar** a qualquer momento para reinici
 ## Conversa com IA
 
 O atendimento principal é uma **conversa livre com IA** (`server/ia.js`):
-o cliente fala do jeito dele e a IA coleta nome, endereço e serviço com
-naturalidade, salvando o lead no mesmo formato de sempre.
+o cliente fala do jeito dele e a IA coleta os dados com naturalidade,
+salvando o lead no mesmo formato de sempre.
+
+Este WhatsApp é a porta de entrada do **Grupo Oliveira** (os dois negócios
+do Tito). A IA abre a conversa com a **saudação oficial do grupo** —
+sempre retribuindo o cumprimento do cliente (bom dia/boa tarde/boa
+noite) — e, quando ainda não sabe o que ele quer, faz a **pergunta-guia**
+com educação: serviço de envidraçamento 🪟 ou aplicativo/site para o
+negócio 📱. Se o cliente já chegar falando o que quer, a IA identifica
+o ramo e segue direto, sem pergunta-guia. Os dois ramos:
+
+- **Envidraçamento** (M Oliveira Envidraçamentos): coleta nome, endereço
+  e serviço de vidro → lead com área `M. Oliveira Envidraçamentos`.
+- **Aplicativos e sites** (LAA-APPS): entende a ideia — nome da pessoa,
+  o que ela procura (aplicativo, site ou sistema), pra qual negócio é e
+  um contato para retorno → lead com área `LAA-APPS` e o campo serviço
+  descrevendo a procura (ex.: "aplicativo para lanchonete").
+
+A **regra anti-preço vale pros dois ramos**: nada de valores, estimativas
+ou prazos fechados — nem de obra, nem de desenvolvimento.
 
 - **Ordem de fallback:** Gemini → OpenAI (só se `OPENAI_API_KEY` existir) →
   formulário atual. Se a IA cair, o cliente continua atendido — nunca mudo.
+  Detalhe: se a IA cair **no meio do ramo de apps** (ramo já identificado),
+  quem assume é o atendimento básico de apps do próprio formulário
+  (mensagem educada + etapas de nome e ideia), que salva o lead básico da
+  LAA-APPS. Sem ramo conhecido, cai no fluxo normal do formulário.
 - **Regra de ouro mantida:** a IA **nunca** passa preço/valor/prazo. Além da
   instrução no prompt, toda resposta passa por uma trava anti-preço antes
   de ser enviada.

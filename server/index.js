@@ -369,6 +369,36 @@ async function processarMensagemPrincipal(telefone, texto) {
     await conversaIA.processarComIA(telefone, t);
   } catch (e) {
     console.log(`⚠️  IA indisponível (${e.message}). Caindo para o formulário nesta conversa.`);
+    const est0 = getEstado(telefone);
+    if (est0.ramo === 'laaapps') {
+      // Ramo de aplicativos/sites (LAA-APPS): o formulário de vidraçaria
+      // não serve aqui. Atendimento básico e EDUCADO usando as próprias
+      // etapas de apps do formulário (app_nome → app_projeto): pede nome
+      // e a ideia e salva o lead básico da LAA-APPS pela mesma salvarLead.
+      // (Se o ramo ainda não era conhecido, cai no fluxo normal abaixo.)
+      est0.modoFormulario = true;
+      est0.area = 'laaapps';
+      const nomeApps = (est0.dadosApps && est0.dadosApps.nome) || '';
+      if (nomeApps) {
+        est0.nome = nomeApps;
+        est0.etapa = 'app_projeto';
+        salvarEstados();
+        await enviarWhatsApp(
+          telefone,
+          'Oi! 😊 Tive uma instabilidade rápida aqui, mas já recuperei. ' +
+            msgVariada(telefone, MSGS.pedeProjeto)
+        );
+      } else {
+        est0.etapa = 'app_nome';
+        salvarEstados();
+        await enviarWhatsApp(
+          telefone,
+          'Oi! 😊 Tive uma instabilidade rápida aqui, mas seguimos! ' +
+            msgVariada(telefone, MSGS.pedeNome)
+        );
+      }
+      return;
+    }
     const est = cairParaFormulario(telefone);
     if (est.nome && est.endereco && est.servico) {
       // Já tinha tudo: salva o lead e confirma, igual ao formulário faria.
