@@ -43,9 +43,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const IA_MOCK = process.env.IA_MOCK === '1';
-// Tempo máximo de espera por chamada de IA. O gemini-3.8-flash pode
-// demorar bem mais de 20s pra responder; com 20s o bot vivia caindo
-// pro formulário mesmo com a IA no ar (timeout em produção).
+// Timeout das chamadas aos provedores de IA. 20s era pouco pro Gemini
+// em produção (Render): quase toda mensagem estourava o prazo e o bot
+// caía pro formulário seco. 45s dá folga sem deixar o cliente preso.
 const IA_TIMEOUT_MS = 45000;
 
 const IA_ATIVA =
@@ -215,6 +215,16 @@ function provedorMock({ mensagens, json }) {
   return 'Perfeito, já anotei aqui! ✅';
 }
 
+// Falha que vale UMA nova tentativa no Gemini: timeout, erro de rede
+// (sem resposta) ou erro 5xx do servidor. Erro 4xx (ex.: 404 de modelo
+// aposentado) NÃO adianta repetir — cai direto pro próximo provedor.
+function ehErroRetentavel(e) {
+  const texto = `${(e && e.message) || ''} ${(e && e.code) || ''}`;
+  if (/timeout/i.test(texto)) return true;
+  if (!e || !e.response) return true;
+  return typeof e.response.status === 'number' && e.response.status >= 500;
+}
+
 async function chamarIA(args) {
   if (IA_MOCK) {
     // Guarda o sistema p/ o mock conseguir montar a resposta de conversa.
@@ -223,24 +233,22 @@ async function chamarIA(args) {
   }
   const erros = [];
   if (GEMINI_API_KEY) {
-    // Uma nova tentativa automática quando a falha é timeout, erro de
-    // rede ou 5xx: é o caso típico do provedor demorar demais e voltar
-    // na segunda chamada. Erro 4xx (ex.: modelo inexistente) NÃO tenta
-    // de novo — cai direto pro próximo provedor.
-    for (let tentativa = 1; tentativa <= 2; tentativa++) {
-      try {
-        return await chamarGemini(args);
-      } catch (e) {
-        const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
-        const tentarDeNovo =
-          tentativa === 1 &&
-          (/timeout/i.test(e.message || '') || !e.response || e.response.status >= 500);
-        console.log('⚠️  Gemini falhou:', det);
-        if (!tentarDeNovo) {
-          erros.push(`gemini: ${det}`);
-          break;
+    try {
+      return await chamarGemini(args);
+    } catch (e) {
+      const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
+      console.log('⚠️  Gemini falhou:', det);
+      if (ehErroRetentavel(e)) {
+        console.log('↪️  Tentando o Gemini novamente…');
+        try {
+          return await chamarGemini(args);
+        } catch (e2) {
+          const det2 = e2.response?.data ? JSON.stringify(e2.response.data).slice(0, 200) : e2.message;
+          erros.push(`gemini: ${det2}`);
+          console.log('⚠️  Gemini falhou:', det2);
         }
-        console.log('↪️  Tentando o Gemini de novo…');
+      } else {
+        erros.push(`gemini: ${det}`);
       }
     }
   }
@@ -580,7 +588,9 @@ module.exports = {
   contemPreco,
   parseJSONDefensivo,
   montarSistemaConversa,
-  chamarIA,
   IA_ATIVA,
   IA_TIMEOUT_MS,
+  GEMINI_MODEL,
+  ehErroRetentavel,
+  chamarIA,
 };
