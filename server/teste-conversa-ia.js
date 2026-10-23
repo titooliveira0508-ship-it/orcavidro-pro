@@ -22,6 +22,10 @@
 //      e o cliente continua sendo atendido
 //   9) Timeout do Gemini → exatamente 1 nova tentativa antes de
 //      acertar; erro 4xx (404) não retenta e cai pro próximo provedor
+//  10) Gemini fora do ar (404) → a INVISION assume: saudação do Grupo
+//      Oliveira, conversa completa e lead salvo. Sem INVISION_API_KEY
+//      ela é pulada; com TODOS os provedores fora, segue o erro de
+//      "IA indisponível" (quem chama cai pro formulário, como hoje)
 //
 // Uso: node teste-conversa-ia.js
 
@@ -37,6 +41,7 @@ const {
   montarSistemaConversa,
   IA_TIMEOUT_MS,
   GEMINI_MODEL,
+  INVISION_MODEL,
   ehErroRetentavel,
 } = require('./ia');
 
@@ -60,6 +65,10 @@ ok(IA_TIMEOUT_MS === 45000, 'timeout das chamadas de IA é 45000ms');
 ok(
   GEMINI_MODEL === (process.env.GEMINI_MODEL || 'gemini-3.8-flash'),
   `modelo padrão do Gemini é gemini-3.8-flash (atual: ${GEMINI_MODEL})`
+);
+ok(
+  INVISION_MODEL === (process.env.INVISION_MODEL || 'openai/gpt-6-astra-invision'),
+  `modelo padrão da Invision é openai/gpt-6-astra-invision (atual: ${INVISION_MODEL})`
 );
 ok(ehErroRetentavel(new Error('timeout of 45000ms exceeded')) === true, 'timeout é erro retentável');
 ok(ehErroRetentavel(new Error('Network Error')) === true, 'erro de rede (sem resposta) é retentável');
@@ -274,6 +283,238 @@ async function testarRetentativaGemini() {
   }
 }
 
+// ─── Fallback Invision: Gemini fora → Invision responde (axios stubado) ─────
+// Mesmo esquema do teste de retentativa: o provedor de verdade não é
+// exercitado pelo mock, então o axios é stubado por URL e o módulo é
+// recarregado com chaves de teste. O stub da Invision imita as respostas
+// do provedor mock (saudação/extração) pra conversa fluir até o lead.
+async function testarFallbackInvision() {
+  console.log('\n── Fallback Invision (Gemini fora do ar) ──');
+  const axios = require('axios');
+  const postOriginal = axios.post;
+  const envAnterior = {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    INVISION_API_KEY: process.env.INVISION_API_KEY,
+    INVISION_MODEL: process.env.INVISION_MODEL,
+    IA_MOCK: process.env.IA_MOCK,
+  };
+  const chamadas = [];
+  let ultimaInvision = null;
+  let invisionFalha = false;
+  function recarregar(env) {
+    for (const [chave, valor] of Object.entries(env)) {
+      if (valor === undefined || valor === '') delete process.env[chave];
+      else process.env[chave] = valor;
+    }
+    delete require.cache[require.resolve('./ia')];
+    return require('./ia');
+  }
+  try {
+    axios.post = async (url, body, config) => {
+      if (url.includes('generativelanguage.googleapis.com')) {
+        chamadas.push('gemini');
+        const erro = new Error('Request failed with status code 404');
+        erro.response = { status: 404, data: { error: { message: 'model not found' } } };
+        throw erro;
+      }
+      if (url.includes('api.openai.com')) {
+        chamadas.push('openai');
+        throw new Error('OpenAI não deveria ser chamada neste cenário');
+      }
+      if (url.includes('invision.dreamvision.com.br')) {
+        chamadas.push('invision');
+        ultimaInvision = { url, body, config };
+        if (invisionFalha) {
+          const erro = new Error('Request failed with status code 500');
+          erro.response = { status: 500, data: { error: { message: 'erro interno simulado' } } };
+          throw erro;
+        }
+        const sistemaTxt = (body.messages[0] && body.messages[0].content) || '';
+        const conversaTxt = body.messages.map((m) => m.content).join('\n');
+        let texto;
+        if (body.response_format) {
+          // Extração (json): completa só quando o cliente já deu os dados.
+          texto = /Carlos Eduardo/.test(conversaTxt)
+            ? JSON.stringify({
+                nome: 'Carlos Eduardo',
+                ramo: 'vidracaria',
+                endereco: 'Rua das Flores, 123, Bangu',
+                servico: 'box de banheiro',
+                detalhes: '',
+                tipo: '',
+                negocio: '',
+                contato: '',
+              })
+            : JSON.stringify({
+                nome: '',
+                ramo: '',
+                endereco: '',
+                servico: '',
+                detalhes: '',
+                tipo: '',
+                negocio: '',
+                contato: '',
+              });
+        } else if (/Os dados já estão completos/.test(sistemaTxt)) {
+          texto =
+            'Pronto! ✅ Já anotei tudo aqui: box de banheiro em Rua das Flores, 123, Bangu. ' +
+            'O Tito vai analisar e te retornar com o orçamento. 🙏';
+        } else if (/inicio: sim/.test(sistemaTxt)) {
+          texto =
+            'Boa noite! 😊 Sou o assistente do Grupo Oliveira. Como posso te ajudar? ' +
+            'Precisa de serviço de envidraçamento 🪟 ou está procurando um aplicativo ou site para o seu negócio 📱?';
+        } else {
+          texto = 'Perfeito, já anotei aqui! ✅';
+        }
+        return { data: { choices: [{ message: { content: texto } }] } };
+      }
+      throw new Error('URL inesperada no stub: ' + url);
+    };
+
+    const iaInv = recarregar({
+      GEMINI_API_KEY: 'chave-gemini-teste',
+      OPENAI_API_KEY: '',
+      INVISION_API_KEY: 'chave-invision-teste',
+      INVISION_MODEL: '',
+      IA_MOCK: '',
+    });
+    ok(iaInv.IA_ATIVA === true, 'IA ativa com Gemini + Invision configurados');
+
+    // 1) Chamada direta: Gemini 404 → OpenAI pulada (sem chave) → Invision.
+    const sistemaTeste = 'sistema de teste\ninicio: sim';
+    chamadas.length = 0;
+    const textoDireto = await iaInv.chamarIA({
+      sistema: sistemaTeste,
+      mensagens: [{ papel: 'cliente', texto: 'Boa noite' }],
+      json: false,
+    });
+    ok(/Grupo Oliveira/.test(textoDireto), 'Gemini fora do ar → quem responde é a Invision');
+    ok(
+      chamadas.join(',') === 'gemini,invision',
+      `ordem da cadeia: Gemini → Invision, OpenAI pulada sem chave (${chamadas.join(' → ')})`
+    );
+    ok(
+      !!ultimaInvision && ultimaInvision.url === 'https://invision.dreamvision.com.br/v1/chat/completions',
+      'URL da Invision é a do gateway /v1/chat/completions'
+    );
+    ok(
+      !!ultimaInvision && ultimaInvision.config.headers.Authorization === 'Bearer chave-invision-teste',
+      'Invision recebe o header Authorization: Bearer <chave>'
+    );
+    ok(
+      !!ultimaInvision && ultimaInvision.body.model === 'openai/gpt-6-astra-invision',
+      `corpo da Invision usa o modelo padrão (atual: ${ultimaInvision && ultimaInvision.body.model})`
+    );
+    ok(
+      !!ultimaInvision &&
+        ultimaInvision.body.messages[0].role === 'system' &&
+        ultimaInvision.body.messages[0].content === sistemaTeste,
+      'Invision recebe o mesmo system prompt dos outros provedores'
+    );
+    ok(
+      !!ultimaInvision && ultimaInvision.config.timeout === 45000,
+      'Invision usa o mesmo timeout das outras chamadas (45000ms)'
+    );
+
+    // 2) Conversa completa pela Invision: saudação → dados → lead salvo.
+    const enviados = [];
+    const leadsSalvos = [];
+    const estado = {};
+    const conversa = iaInv.criarConversaIA({
+      enviarWhatsApp: async (_tel, msg) => {
+        enviados.push(msg);
+      },
+      salvarLead: (_tel, lead) => {
+        leadsSalvos.push(lead);
+      },
+      getEstado: () => estado,
+      salvarEstados: () => {},
+    });
+    await conversa.processarComIA('5521999990009', 'Boa noite');
+    ok(
+      enviados.length === 1 &&
+        enviados[0].includes('Grupo Oliveira') &&
+        enviados[0].includes('envidraçamento 🪟'),
+      'conversa via Invision abre com a saudação do Grupo Oliveira + pergunta-guia'
+    );
+    await conversa.processarComIA(
+      '5521999990009',
+      'Meu nome é Carlos Eduardo, preciso de um box pro banheiro, é na Rua das Flores, 123, Bangu'
+    );
+    ok(leadsSalvos.length === 1, 'lead salvo ao completar os dados via Invision');
+    if (leadsSalvos[0]) {
+      ok(leadsSalvos[0].nome === 'Carlos Eduardo', `lead.nome = "${leadsSalvos[0].nome}"`);
+      ok(/box/i.test(leadsSalvos[0].servico), `lead.servico = "${leadsSalvos[0].servico}"`);
+      ok(/Rua das Flores/.test(leadsSalvos[0].endereco), `lead.endereco = "${leadsSalvos[0].endereco}"`);
+      ok(leadsSalvos[0].area === 'vidracaria', `lead.area = "${leadsSalvos[0].area}"`);
+    }
+    ok(
+      enviados.length === 2 && /anotei/i.test(enviados[1]),
+      'confirmação do pedido enviada ao cliente via Invision'
+    );
+
+    // 3) TODOS os provedores fora → mesmo erro de hoje ("IA indisponível").
+    invisionFalha = true;
+    let erroTodos = null;
+    try {
+      await iaInv.chamarIA({
+        sistema: 'teste',
+        mensagens: [{ papel: 'cliente', texto: 'oi' }],
+        json: false,
+      });
+    } catch (e) {
+      erroTodos = e;
+    }
+    invisionFalha = false;
+    ok(
+      !!erroTodos && /IA indisponível/.test(erroTodos.message) && /invision/i.test(erroTodos.message),
+      'todos os provedores fora → erro "IA indisponível" (index.js cai pro formulário)'
+    );
+
+    // 4) Sem INVISION_API_KEY, a Invision nunca é chamada.
+    const iaSemInv = recarregar({
+      GEMINI_API_KEY: 'chave-gemini-teste',
+      OPENAI_API_KEY: '',
+      INVISION_API_KEY: '',
+      INVISION_MODEL: '',
+      IA_MOCK: '',
+    });
+    chamadas.length = 0;
+    let erroSem = null;
+    try {
+      await iaSemInv.chamarIA({
+        sistema: 'teste',
+        mensagens: [{ papel: 'cliente', texto: 'oi' }],
+        json: false,
+      });
+    } catch (e) {
+      erroSem = e;
+    }
+    ok(
+      !!erroSem && !chamadas.includes('invision'),
+      'sem INVISION_API_KEY, a Invision é pulada (comportamento atual preservado)'
+    );
+
+    // 5) Só a Invision configurada já ativa a IA.
+    const iaSoInv = recarregar({
+      GEMINI_API_KEY: '',
+      OPENAI_API_KEY: '',
+      INVISION_API_KEY: 'chave-invision-teste',
+      INVISION_MODEL: '',
+      IA_MOCK: '',
+    });
+    ok(iaSoInv.IA_ATIVA === true, 'IA ativa só com a Invision configurada');
+  } finally {
+    axios.post = postOriginal;
+    for (const [chave, valor] of Object.entries(envAnterior)) {
+      if (valor === undefined) delete process.env[chave];
+      else process.env[chave] = valor;
+    }
+    delete require.cache[require.resolve('./ia')];
+  }
+}
+
 // ─── Cenário 1: conversa com IA ─────────────────────────────────────────────
 async function cenarioIA() {
   console.log('\n── Cenário 1: conversa com IA (mock) ──');
@@ -462,6 +703,7 @@ async function cenarioFallback() {
 
 (async () => {
   await testarRetentativaGemini();
+  await testarFallbackInvision();
   await cenarioIA();
   await cenarioApps();
   await cenarioFallbackApps();
