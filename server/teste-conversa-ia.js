@@ -5,8 +5,8 @@
 //
 // Verifica:
 //   0) Prompt de sistema: saudação oficial do GRUPO OLIVEIRA (retribuir
-//      o cumprimento), pergunta-guia educada dos dois ramos, os dois
-//      ramos de coleta e a regra anti-preço valendo pros dois
+//      o cumprimento), pergunta-guia educada dos três ramos, os três
+//      ramos de coleta e a regra anti-preço valendo pros três
 //   1) GET /health responde ok
 //   2) Assinatura inválida → 403
 //   3) Conversa natural (vidraçaria): IA pede nome → endereço →
@@ -29,6 +29,13 @@
 //      INVISION_API_KEY ela é pulada; com TODOS os provedores fora,
 //      segue o erro de "IA indisponível" (quem chama cai pro
 //      formulário, como hoje)
+//  11) Ramo FELÍCIA PERSONALIZADOS (IA): cliente pede canecas
+//      personalizadas → bot diz SIM (Felícia Personalizados), pergunta
+//      de preço no ramo não gera valor nenhum, coleta o nome e salva
+//      o lead com area 'Felícia Personalizados'
+//  12) Ramo FELÍCIA no FORMULÁRIO (IA fora do ar): a triagem oferece a
+//      3ª opção (brindes/personalizados 🎁, atalho "3") e o mini-fluxo
+//      nome → produto conclui e salva o lead da Felícia
 //
 // Uso: node teste-conversa-ia.js
 
@@ -113,10 +120,24 @@ ok(
   'prompt descreve os dois ramos de coleta'
 );
 ok(
+  promptInicio.includes('RAMO BRINDES E PERSONALIZADOS') && promptInicio.includes('Felícia Personalizados'),
+  'prompt descreve o terceiro ramo (Felícia Personalizados)'
+);
+ok(
+  promptInicio.includes('brindes e produtos personalizados 🎁'),
+  'pergunta-guia inclui o terceiro ramo (brindes/personalizados)'
+);
+ok(
+  /TRABALHA SIM/.test(promptInicio) && /NUNCA diga que o grupo não trabalha/.test(promptInicio),
+  'prompt proíbe negar o serviço de personalizados'
+);
+ok(
   /REGRA ABSOLUTA/.test(promptInicio) && /NUNCA fala preço/.test(promptInicio),
   'regra anti-preço presente no prompt'
 );
+ok(/vale pros três ramos/.test(promptInicio), 'anti-preço vale pros três ramos');
 ok(/nem de desenvolvimento de aplicativo/.test(promptInicio), 'anti-preço cobre desenvolvimento de app/site');
+ok(/nem de produto personalizado/.test(promptInicio), 'anti-preço cobre produto personalizado');
 ok(promptInicio.includes('ramo: (indefinido)') && promptInicio.includes('inicio: sim'), 'marcadores de estado no prompt');
 const promptApps = montarSistemaConversa({
   ramo: 'laaapps',
@@ -127,6 +148,23 @@ const promptApps = montarSistemaConversa({
   confirmacao: false,
 });
 ok(promptApps.includes('ramo: laaapps') && promptApps.includes('faltam: contato'), 'prompt do ramo apps carrega ramo/faltam');
+const promptFelicia = montarSistemaConversa({
+  ramo: 'personalizados',
+  inicio: false,
+  dadosIA: dadosVaziosIA,
+  dadosApps: dadosVaziosApps,
+  dadosFelicia: { nome: 'Fernanda Lima', produto: 'canecas personalizadas', detalhes: '' },
+  faltam: [],
+  confirmacao: true,
+});
+ok(
+  promptFelicia.includes('ramo: personalizados') && promptFelicia.includes('produto: canecas personalizadas'),
+  'prompt do ramo personalizados carrega ramo/produto'
+);
+ok(
+  promptFelicia.includes('Felícia Personalizados vai retornar o contato'),
+  'confirmação do ramo personalizados cita a Felícia Personalizados'
+);
 
 // ─── Sobe o servidor numa pasta temporária ──────────────────────────────────
 function prepararPasta() {
@@ -371,7 +409,7 @@ async function testarInvisionPrincipal() {
         } else if (/inicio: sim/.test(sistemaTxt)) {
           texto =
             'Boa noite! 😊 Sou o assistente do Grupo Oliveira. Como posso te ajudar? ' +
-            'Precisa de serviço de envidraçamento 🪟 ou está procurando um aplicativo ou site para o seu negócio 📱?';
+            'Precisa de serviço de envidraçamento 🪟, está procurando um aplicativo ou site para o seu negócio 📱 ou quer brindes e produtos personalizados 🎁?';
         } else {
           texto = 'Perfeito, já anotei aqui! ✅';
         }
@@ -747,6 +785,132 @@ async function cenarioFallback() {
   }
 }
 
+// ─── Cenário 5: ramo Felícia Personalizados (IA) ────────────────────────────
+async function cenarioFelicia() {
+  console.log('\n── Cenário 5: conversa do ramo Felícia Personalizados (mock) ──');
+  const TEL = '5521999990005';
+  const { proc, getLog } = subirServidor(3462, {});
+  try {
+    ok(await esperar(() => getLog().includes('no ar!'), 8000, 'boot'), 'servidor subiu');
+
+    // 1) saudação → pergunta-guia já inclui o terceiro ramo
+    //    (o log de envio trunca em 120 caracteres: a vírgula depois do 🪟
+    //    é a marca do texto NOVO da guia — o antigo era "🪟 ou está...")
+    await enviarMensagem(3462, TEL, 'Boa noite', 'wamid.p1');
+    ok(
+      await esperar(() => getLog().includes('envidraçamento 🪟,'), 6000, 'guia c/ personalizados'),
+      'pergunta-guia inclui brindes/personalizados 🎁 (texto completo conferido no prompt, seção 0)'
+    );
+
+    // 2) cliente pede personalizados → bot diz SIM (Felícia) e pede o nome
+    await enviarMensagem(3462, TEL, 'Quero canecas personalizadas com a logo da minha empresa', 'wamid.p2');
+    ok(
+      await esperar(() => getLog().includes('Trabalhamos sim'), 6000, 'bot diz sim pros personalizados'),
+      'bot responde SIM pros brindes/personalizados (não nega o serviço)'
+    );
+    ok(
+      await esperar(() => getLog().includes('Felícia Personalizados'), 4000, 'cita a Felícia'),
+      'bot apresenta a Felícia Personalizados'
+    );
+    ok(
+      await esperar(() => getLog().includes('se chama'), 4000, 'IA personalizados pede nome'),
+      'ramo personalizados: IA pede o nome'
+    );
+
+    // 3) pergunta de preço NO RAMO → nenhum valor na resposta, conversa segue
+    await enviarMensagem(3462, TEL, 'E quanto custa?', 'wamid.p3');
+    await dormir(800);
+    ok(!/Texto:.*(R\$|\d+\s*reais)/.test(getLog()), 'ramo personalizados: nenhuma resposta com valor em dinheiro');
+
+    // 4) nome → completa (nome + produto) → lead salvo como Felícia
+    await enviarMensagem(3462, TEL, 'Meu nome é Fernanda Lima', 'wamid.p4');
+    ok(
+      await esperar(() => getLog().includes('NOVO LEAD RECEBIDO'), 6000, 'lead personalizados salvo'),
+      'lead de personalizados salvo ao completar os dados'
+    );
+    ok(
+      await esperar(() => getLog().includes('anotei'), 4000, 'confirmação'),
+      'IA confirma o pedido de personalizados'
+    );
+
+    const leads = await fetch('http://127.0.0.1:3462/leads', {
+      headers: { 'x-admin-token': ADMIN_TOKEN },
+    }).then((r) => r.json());
+    const lead = leads.find((l) => l.telefone === TEL);
+    ok(!!lead, 'lead de personalizados aparece no GET /leads');
+    if (lead) {
+      ok(lead.area === 'Felícia Personalizados', `lead.area = "${lead.area}"`);
+      ok(lead.nome === 'Fernanda Lima', `lead.nome = "${lead.nome}"`);
+      ok(/canecas personalizadas/i.test(lead.servico), `lead.servico = "${lead.servico}"`);
+    }
+  } finally {
+    proc.kill('SIGTERM');
+  }
+}
+
+// ─── Cenário 6: ramo Felícia no formulário (IA fora do ar) ──────────────────
+async function cenarioFeliciaFormulario() {
+  console.log('\n── Cenário 6: ramo Felícia Personalizados no formulário (IA fora do ar) ──');
+  const TEL = '5521999990006';
+  const TEL2 = '5521999990007';
+  const { proc, getLog } = subirServidor(3463, { IA_MOCK_FALHAR: '1' });
+  try {
+    ok(await esperar(() => getLog().includes('no ar!'), 8000, 'boot'), 'servidor subiu');
+
+    // 1) cliente já chega pedindo personalizados → formulário detecta o
+    //    nicho novo e pede o nome (sem negar o serviço)
+    await enviarMensagem(3463, TEL, 'quero brindes personalizados pra minha empresa', 'wamid.q1');
+    ok(
+      await esperar(() => getLog().includes('IA indisponível'), 6000, 'log de fallback'),
+      'log registra a queda da IA'
+    );
+    ok(
+      await esperar(() => /Texto:.*(chama|seu nome)/s.test(getLog()), 6000, 'form pede nome'),
+      'formulário detecta personalizados e pede o nome'
+    );
+
+    // 2) nome → pede o produto/ideia
+    await enviarMensagem(3463, TEL, 'Fernanda Lima', 'wamid.q2');
+    ok(
+      await esperar(() => getLog().includes('personalizar'), 6000, 'form pede produto'),
+      'formulário pede o produto/ideia'
+    );
+
+    // 3) produto → conclui e salva o lead da Felícia
+    await enviarMensagem(3463, TEL, 'canecas com a logo da empresa', 'wamid.q3');
+    ok(
+      await esperar(() => getLog().includes('NOVO LEAD RECEBIDO'), 6000, 'lead form salvo'),
+      'lead de personalizados salvo pelo formulário'
+    );
+
+    // 4) triagem: conversa nova sem nicho → pergunta oferece a 3ª opção
+    //    e o atalho "3" entra no fluxo da Felícia
+    await enviarMensagem(3463, TEL2, 'oi', 'wamid.q4');
+    ok(
+      await esperar(() => getLog().includes('brindes/personalizados 🎁'), 6000, 'triagem c/ 3ª opção'),
+      'triagem do formulário oferece brindes/personalizados 🎁'
+    );
+    await enviarMensagem(3463, TEL2, '3', 'wamid.q5');
+    ok(
+      await esperar(() => /Texto:.*(chama|seu nome)/s.test(getLog()), 6000, 'atalho 3 pede nome'),
+      'atalho "3" entra no fluxo da Felícia (pede o nome)'
+    );
+
+    const leads = await fetch('http://127.0.0.1:3463/leads', {
+      headers: { 'x-admin-token': ADMIN_TOKEN },
+    }).then((r) => r.json());
+    const lead = leads.find((l) => l.telefone === TEL);
+    ok(!!lead, 'lead do formulário aparece no GET /leads');
+    if (lead) {
+      ok(lead.area === 'Felícia Personalizados', `lead.area = "${lead.area}"`);
+      ok(lead.nome === 'Fernanda Lima', `lead.nome = "${lead.nome}"`);
+      ok(/canecas/i.test(lead.servico), `lead.servico = "${lead.servico}"`);
+    }
+  } finally {
+    proc.kill('SIGTERM');
+  }
+}
+
 (async () => {
   await testarRetentativaGemini();
   await testarInvisionPrincipal();
@@ -754,6 +918,8 @@ async function cenarioFallback() {
   await cenarioApps();
   await cenarioFallbackApps();
   await cenarioFallback();
+  await cenarioFelicia();
+  await cenarioFeliciaFormulario();
   console.log(falhas === 0 ? '\n🎉 TODOS OS TESTES PASSARAM' : `\n⚠️  ${falhas} TESTE(S) FALHARAM`);
   process.exit(falhas === 0 ? 0 : 1);
 })();

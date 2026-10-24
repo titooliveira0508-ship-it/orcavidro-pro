@@ -2,16 +2,21 @@
 // Atendimento com IA de verdade (conversa livre e natural), substituindo o
 // formulário rígido como caminho principal.
 //
-// Este WhatsApp é a porta de entrada do GRUPO OLIVEIRA (os dois negócios
+// Este WhatsApp é a porta de entrada do GRUPO OLIVEIRA (os três negócios
 // do Tito). A IA abre a conversa com a saudação oficial do grupo — sempre
 // retribuindo o cumprimento do cliente — e, quando ainda não sabe o que
-// ele quer, faz a pergunta-guia com educação: envidraçamento 🪟 ou
-// aplicativo/site 📱. Daí seguem dois ramos de coleta:
-//   · vidracaria → nome, endereço, serviço de vidro
-//                  (lead salvo com area 'M. Oliveira Envidraçamentos')
-//   · laaapps    → nome, o que procura (aplicativo/site/sistema),
-//                  pra qual negócio é e um contato para retorno
-//                  (lead salvo com area 'LAA-APPS')
+// ele quer, faz a pergunta-guia com educação: envidraçamento 🪟,
+// aplicativo/site 📱 ou brindes/personalizados 🎁. Daí seguem três
+// ramos de coleta:
+//   · vidracaria    → nome, endereço, serviço de vidro
+//                     (lead salvo com area 'M. Oliveira Envidraçamentos')
+//   · laaapps       → nome, o que procura (aplicativo/site/sistema),
+//                     pra qual negócio é e um contato para retorno
+//                     (lead salvo com area 'LAA-APPS')
+//   · personalizados → nome e o produto/ideia que quer personalizar
+//                     (brindes, presentes e itens corporativos —
+//                     gravação a laser, sublimação e DTF)
+//                     (lead salvo com area 'Felícia Personalizados')
 // Se o cliente já chegar falando o que quer, nada de pergunta-guia:
 // a IA identifica o ramo pelo assunto e segue direto.
 //
@@ -175,9 +180,24 @@ function provedorMock({ mensagens, json }) {
     const detalhes = (baseRamo.match(/\d+(?:[.,]\d+)?\s*(?:cm|mm|m\b)/i) || [])[0] || '';
     // Ramo + campos do ramo de aplicativos/sites (só falas do cliente).
     const appMatch = baseRamo.replace(/max\s*system/gi, '').match(/(aplicativo|\bapp\b|site|sistema)/i);
+    // Ramo Felícia Personalizados: brindes/produtos personalizados,
+    // gravação a laser, sublimação, DTF e os produtos típicos (caneca etc.).
+    const feliciaMatch = baseRamo.match(
+      /(brindes?|personaliz|canecas?|grava[çc][aã]o|laser|sublima|\bdtf\b)/i
+    );
     let ramo = '';
     if (serv) ramo = 'vidracaria';
     else if (appMatch) ramo = 'laaapps';
+    else if (feliciaMatch) ramo = 'personalizados';
+    // Produto/ideia do ramo personalizados: o substantivo do produto e o
+    // que vier depois dele na mesma frase (até vírgula/ponto).
+    let produto = '';
+    if (feliciaMatch) {
+      const prodMatch = baseRamo.match(
+        /((?:canecas?|copos?|camisetas?|garrafas?|chaveiros?|ta[çc]as?|squeezes?|brindes?|kits?|presentes?)[\p{L} ]{0,60})/iu
+      );
+      produto = prodMatch ? prodMatch[1].trim().replace(/[\s.!?…]+$/, '') : 'produtos personalizados';
+    }
     let tipo = '';
     if (appMatch) {
       tipo = /site/i.test(appMatch[0]) ? 'site' : /sistema/i.test(appMatch[0]) ? 'sistema' : 'aplicativo';
@@ -203,12 +223,13 @@ function provedorMock({ mensagens, json }) {
       tipo,
       negocio,
       contato,
+      produto,
     });
   }
   // Resposta de conversa do mock: olha os marcadores de estado do sistema.
   const sistemaTxt = mensagens.__sistema || '';
   const faltam = (sistemaTxt.match(/faltam:\s*([^\n]+)/i) || [])[1] || '';
-  const ramoMock = ((sistemaTxt.match(/(?:^|\n)ramo:\s*(laaapps|vidracaria)/) || [])[1] || '');
+  const ramoMock = ((sistemaTxt.match(/(?:^|\n)ramo:\s*(laaapps|vidracaria|personalizados)/) || [])[1] || '');
   const inicioMock = /inicio:\s*sim/.test(sistemaTxt);
   const ultimaCliente = [...mensagens].reverse().find((m) => m.papel === 'cliente');
   const textoCliente = ultimaCliente ? ultimaCliente.texto : '';
@@ -224,8 +245,17 @@ function provedorMock({ mensagens, json }) {
     return (
       saud +
       ' Sou o assistente do Grupo Oliveira. Como posso te ajudar? ' +
-      'Precisa de serviço de envidraçamento 🪟 ou está procurando um aplicativo ou site para o seu negócio 📱?'
+      'Precisa de serviço de envidraçamento 🪟, está procurando um aplicativo ou site para o seu negócio 📱 ou quer brindes e produtos personalizados 🎁?'
     );
+  }
+  if (ramoMock === 'personalizados') {
+    if (/nome/.test(faltam)) {
+      return 'Trabalhamos sim! 😊 É pela Felícia Personalizados. Pra começar, como você se chama?';
+    }
+    if (/produto/.test(faltam)) {
+      return 'E o que você quer personalizar? Me conta o produto ou a ideia 🎁';
+    }
+    return 'Perfeito, já anotei aqui! ✅';
   }
   if (ramoMock === 'laaapps') {
     if (/nome/.test(faltam)) {
@@ -343,18 +373,19 @@ function contemPreco(texto) {
 
 // ─── Extração estruturada (defensiva) ───────────────────────────────────────
 const SISTEMA_EXTRACAO =
-  'Você é um extrator de dados de uma conversa de WhatsApp do Grupo Oliveira (a vidraçaria M Oliveira Envidraçamentos e a LAA-APPS, de aplicativos/sites/sistemas). ' +
+  'Você é um extrator de dados de uma conversa de WhatsApp do Grupo Oliveira (a vidraçaria M Oliveira Envidraçamentos, a LAA-APPS, de aplicativos/sites/sistemas, e a Felícia Personalizados, de brindes e produtos personalizados). ' +
   'Analise a conversa (mensagens do Cliente e do Assistente) e retorne SOMENTE um JSON válido, sem texto extra, no formato:\n' +
-  '{"nome": "", "ramo": "", "endereco": "", "servico": "", "detalhes": "", "tipo": "", "negocio": "", "contato": ""}\n' +
+  '{"nome": "", "ramo": "", "endereco": "", "servico": "", "detalhes": "", "tipo": "", "negocio": "", "contato": "", "produto": ""}\n' +
   'Regras: preencha apenas com o que o CLIENTE afirmou explicitamente. Não invente nada. ' +
   '"nome" = nome do cliente/pessoa. ' +
-  '"ramo" = "vidracaria" se o assunto é vidro, box, janela, espelho, guarda-corpo ou sacada; "laaapps" se o assunto é aplicativo, site ou sistema; "" se ainda não dá pra saber. ' +
+  '"ramo" = "vidracaria" se o assunto é vidro, box, janela, espelho, guarda-corpo ou sacada; "laaapps" se o assunto é aplicativo, site ou sistema; "personalizados" se o assunto é brinde, presente ou produto personalizado (caneca, copo, gravação a laser, sublimação, DTF); "" se ainda não dá pra saber. ' +
   '"endereco" = endereço da instalação (logradouro, número, bairro, cidade) que o cliente informou (só ramo vidracaria). ' +
   '"servico" = o serviço/produto de vidro desejado (ex.: box de banheiro, janela de vidro, espelho, guarda-corpo, envidraçamento de sacada). ' +
   '"tipo" = (só ramo laaapps) o que a pessoa procura: "aplicativo", "site" ou "sistema". ' +
   '"negocio" = (só ramo laaapps) o negócio da pessoa (ex.: lanchonete, loja de roupas, clínica). ' +
   '"contato" = (só ramo laaapps) o contato para retorno que a pessoa informou (telefone, e-mail ou "este WhatsApp"). ' +
-  '"detalhes" = medidas, descrição da ideia, cores, prazos ou observações úteis ditas pelo cliente. Campo desconhecido = "".';
+  '"produto" = (só ramo personalizados) o produto ou ideia que a pessoa quer personalizar (ex.: canecas com a logo da empresa, copos gravados a laser, kit de brindes de fim de ano). ' +
+  '"detalhes" = medidas, quantidades, descrição da ideia, cores, prazos ou observações úteis ditas pelo cliente. Campo desconhecido = "".';
 
 function parseJSONDefensivo(texto) {
   if (!texto) return null;
@@ -390,47 +421,57 @@ async function extrairDados(historico) {
   const ramoBruto = campoTexto(o, 'ramo', 20).toLowerCase();
   return {
     nome: campoTexto(o, 'nome', 80),
-    ramo: ramoBruto === 'vidracaria' || ramoBruto === 'laaapps' ? ramoBruto : '',
+    ramo:
+      ramoBruto === 'vidracaria' || ramoBruto === 'laaapps' || ramoBruto === 'personalizados'
+        ? ramoBruto
+        : '',
     endereco: campoTexto(o, 'endereco', 200),
     servico: campoTexto(o, 'servico', 120),
     detalhes: campoTexto(o, 'detalhes', 300),
     tipo: campoTexto(o, 'tipo', 40),
     negocio: campoTexto(o, 'negocio', 120),
     contato: campoTexto(o, 'contato', 120),
+    produto: campoTexto(o, 'produto', 200),
   };
 }
 
 // ─── Prompt de conversa ─────────────────────────────────────────────────────
 // Saudação oficial do GRUPO OLIVEIRA: educação primeiro (retribuir o
 // cumprimento), apresentação breve do grupo e — só quando ainda não se
-// sabe o que o cliente quer — a pergunta-guia dos dois ramos. Se o
+// sabe o que o cliente quer — a pergunta-guia dos três ramos. Se o
 // cliente já chegar falando o que quer, a IA identifica o ramo e segue
 // direto, sem pergunta-guia.
 function montarSistemaConversa(ctx) {
   const { ramo, inicio, dadosIA, dadosApps, faltam, confirmacao } = ctx;
+  const dadosFelicia = ctx.dadosFelicia || { nome: '', produto: '', detalhes: '' };
   let s =
-    'Você é o assistente virtual do GRUPO OLIVEIRA, atendendo pelo WhatsApp. O grupo reúne dois negócios: a M OLIVEIRA ENVIDRAÇAMENTOS (vidraçaria no Rio de Janeiro) e a LAA-APPS (aplicativos, sites e sistemas sob encomenda).\n' +
+    'Você é o assistente virtual do GRUPO OLIVEIRA, atendendo pelo WhatsApp. O grupo reúne três negócios: a M OLIVEIRA ENVIDRAÇAMENTOS (vidraçaria no Rio de Janeiro), a LAA-APPS (aplicativos, sites e sistemas sob encomenda) e a FELÍCIA PERSONALIZADOS (brindes, presentes e itens corporativos personalizados, com gravação a laser, sublimação e DTF).\n' +
     'EDUCAÇÃO ANTES DE TUDO: se o cliente cumprimentar (oi, olá, bom dia, boa tarde, boa noite), SEMPRE retribua o cumprimento no mesmo espírito antes de qualquer pergunta — ex.: ele disse "boa noite", você responde "Boa noite! 😊". No começo da conversa, apresente-se em uma frase curta como assistente do Grupo Oliveira e pergunte como pode ajudar.\n' +
-    'PERGUNTA-GUIA (só na abertura, e só se você ainda não sabe o que o cliente quer): pergunte UMA vez, com educação e sempre depois da saudação: "Precisa de serviço de envidraçamento 🪟 ou está procurando um aplicativo ou site para o seu negócio 📱?" Nunca abra a conversa com essa pergunta de forma seca, sem cumprimentar — e nunca repita a pergunta-guia na mesma conversa.\n' +
-    'ATALHO: se o cliente já chegar dizendo o que quer (ex.: "quero um box pro banheiro", "quero um app pra minha loja"), NÃO faça a pergunta-guia: identifique o ramo pelo assunto e siga direto no atendimento daquele ramo (sem esquecer de retribuir a saudação, se ele cumprimentou).\n' +
+    'PERGUNTA-GUIA (só na abertura, e só se você ainda não sabe o que o cliente quer): pergunte UMA vez, com educação e sempre depois da saudação: "Precisa de serviço de envidraçamento 🪟, está procurando um aplicativo ou site para o seu negócio 📱 ou quer brindes e produtos personalizados 🎁?" Nunca abra a conversa com essa pergunta de forma seca, sem cumprimentar — e nunca repita a pergunta-guia na mesma conversa.\n' +
+    'ATALHO: se o cliente já chegar dizendo o que quer (ex.: "quero um box pro banheiro", "quero um app pra minha loja", "quero canecas com a logo da minha empresa"), NÃO faça a pergunta-guia: identifique o ramo pelo assunto e siga direto no atendimento daquele ramo (sem esquecer de retribuir a saudação, se ele cumprimentou).\n' +
     'Fale como uma pessoa de verdade: simpático, natural, informal na medida certa. Respostas CURTAS (1 a 3 frases), estilo WhatsApp. ' +
     'Nada de textão, listas numeradas, menus ou tom de robô/formulário. Reaja ao que o cliente falou antes de perguntar o próximo item — uma coisa por vez.\n' +
     'RAMO ENVIDRAÇAMENTO (M Oliveira Envidraçamentos): serviços de box de banheiro, janelas, portas de vidro, espelhos, guarda-corpos, cortinas de vidro, envidraçamento de sacadas, sistemas Versatik e Max System. ' +
     'Objetivo: descobrir com naturalidade (1) o nome do cliente, (2) o endereço onde o serviço será feito (logradouro, número e bairro) e (3) qual serviço ele quer — aproveitando medidas e detalhes que ele oferecer, sem forçar.\n' +
     'RAMO APLICATIVOS E SITES (LAA-APPS): objetivo: entender a ideia com naturalidade: (1) o nome da pessoa, (2) o que ela procura (um aplicativo, um site ou um sistema), (3) pra qual negócio é e (4) um contato para retorno (pode ser este WhatsApp mesmo). Mostre interesse genuíno pela ideia, sem virar interrogatório.\n' +
-    'REGRA ABSOLUTA (vale pros dois ramos): você NUNCA fala preço, valor, estimativa, faixa de preço nem prazo fechado — nem de serviço de vidro, nem de desenvolvimento de aplicativo, site ou sistema. Se perguntarem preço ou prazo, diga que cada caso é analisado e que a equipe prepara a proposta e retorna o contato — e siga a conversa coletando os dados.\n' +
+    'RAMO BRINDES E PERSONALIZADOS (Felícia Personalizados): o grupo TRABALHA SIM com brindes, presentes e itens corporativos personalizados — ex.: copos, canecas e peças com gravação a laser, sublimação e DTF. Se o cliente perguntar por brindes ou produtos personalizados, NUNCA diga que o grupo não trabalha com isso: receba bem o pedido dizendo que é com a Felícia Personalizados. ' +
+    'Objetivo: descobrir com naturalidade (1) o nome da pessoa e (2) qual produto ou ideia ela quer personalizar (o que é, com qual arte/logo, quantidade se ela souber — sem forçar). Mostre interesse genuíno pela ideia, sem virar interrogatório.\n' +
+    'REGRA ABSOLUTA (vale pros três ramos): você NUNCA fala preço, valor, estimativa, faixa de preço nem prazo fechado — nem de serviço de vidro, nem de desenvolvimento de aplicativo, site ou sistema, nem de produto personalizado. Se perguntarem preço ou prazo, diga que cada caso é analisado e que a equipe prepara a proposta e retorna o contato — e siga a conversa coletando os dados.\n' +
     'Não invente informações das empresas: nada de prometer desconto, garantia, marca ou prazo que não foi citado.\n' +
     '---\n' +
     `ramo: ${ramo || '(indefinido)'}\n` +
     `inicio: ${inicio ? 'sim' : 'nao'}\n` +
     `Dados já coletados — envidraçamento: nome: ${dadosIA.nome || '(ainda não)'} | endereço: ${dadosIA.endereco || '(ainda não)'} | serviço: ${dadosIA.servico || '(ainda não)'}\n` +
     `Dados já coletados — aplicativos/sites: nome: ${dadosApps.nome || '(ainda não)'} | procura: ${dadosApps.tipo || '(ainda não)'} | negócio: ${dadosApps.negocio || '(ainda não)'} | contato: ${dadosApps.contato || '(ainda não)'}\n` +
+    `Dados já coletados — personalizados: nome: ${dadosFelicia.nome || '(ainda não)'} | produto: ${dadosFelicia.produto || '(ainda não)'}\n` +
     `faltam: ${faltam.length ? faltam.join(', ') : 'nada'}\n`;
   if (confirmacao) {
     s +=
       ramo === 'laaapps'
         ? 'Os dados já estão completos e a ideia foi registrada. Apenas agradeça de forma natural, confirme resumidamente o que foi anotado (o que a pessoa procura e pra qual negócio) e avise que a equipe da LAA-APPS vai retornar o contato. NÃO peça mais nenhum dado.'
-        : 'Os dados já estão completos e o pedido foi registrado. Apenas agradeça de forma natural, confirme resumidamente o que foi anotado (serviço e endereço) e avise que o Tito vai analisar e retornar com o orçamento. NÃO peça mais nenhum dado.';
+        : ramo === 'personalizados'
+          ? 'Os dados já estão completos e o pedido foi registrado. Apenas agradeça de forma natural, confirme resumidamente o que foi anotado (o produto ou ideia de personalizado) e avise que a equipe da Felícia Personalizados vai retornar o contato. NÃO peça mais nenhum dado.'
+          : 'Os dados já estão completos e o pedido foi registrado. Apenas agradeça de forma natural, confirme resumidamente o que foi anotado (serviço e endereço) e avise que o Tito vai analisar e retornar com o orçamento. NÃO peça mais nenhum dado.';
   }
   return s;
 }
@@ -444,6 +485,13 @@ function faltamDoEstado(estado) {
     if (!a.tipo) f.push('tipo');
     if (!a.negocio) f.push('negocio');
     if (!a.contato) f.push('contato');
+    return f;
+  }
+  if (estado.ramo === 'personalizados') {
+    const p = estado.dadosFelicia || { nome: '', produto: '' };
+    const f = [];
+    if (!p.nome) f.push('nome');
+    if (!p.produto) f.push('produto');
     return f;
   }
   const d = estado.dadosIA;
@@ -492,6 +540,23 @@ function mensagemConfirmacaoApp(a) {
   );
 }
 
+// Mensagem segura do ramo de personalizados quando a trava anti-preço dispara.
+function respostaSeguraPrecoFelicia(p) {
+  let base =
+    'Sobre valores eu não consigo te passar por aqui 😅 Cada produto é analisado com calma, e a equipe da Felícia Personalizados prepara a proposta e te retorna o contato.';
+  if (!p.nome) base += '\n\nEnquanto isso, me fala: como você se chama?';
+  else if (!p.produto) base += '\n\nE o que você quer personalizar? Me conta o produto ou a ideia 🎁';
+  return base;
+}
+
+function mensagemConfirmacaoFelicia(p) {
+  const primeiro = (p.nome || '').split(' ')[0] || '';
+  return (
+    `Pronto${primeiro ? ', ' + primeiro : ''}! ✅ Já anotei seu pedido: *${p.produto}*.\n\n` +
+    'A equipe da Felícia Personalizados vai analisar e te retornar o contato. Obrigado por falar com o Grupo Oliveira! 🙏'
+  );
+}
+
 // ─── Turno de conversa com IA ───────────────────────────────────────────────
 // Lança erro se a IA estiver indisponível → index.js cai pro formulário.
 function criarConversaIA(deps) {
@@ -505,6 +570,7 @@ function criarConversaIA(deps) {
       inicio,
       dadosIA: estado.dadosIA,
       dadosApps: estado.dadosApps,
+      dadosFelicia: estado.dadosFelicia,
       faltam,
       confirmacao,
     });
@@ -517,6 +583,9 @@ function criarConversaIA(deps) {
     if (!estado.dadosIA) estado.dadosIA = { nome: '', endereco: '', servico: '', detalhes: '' };
     if (!estado.dadosApps) {
       estado.dadosApps = { nome: '', tipo: '', negocio: '', contato: '', detalhes: '' };
+    }
+    if (!estado.dadosFelicia) {
+      estado.dadosFelicia = { nome: '', produto: '', detalhes: '' };
     }
     if (!Array.isArray(estado.historicoIA)) estado.historicoIA = [];
     estado.modoIA = true;
@@ -534,9 +603,11 @@ function criarConversaIA(deps) {
       if (!estado.ramo && extraido.ramo) estado.ramo = extraido.ramo;
       if (!estado.ramo && extraido.servico) estado.ramo = 'vidracaria';
       if (!estado.ramo && extraido.tipo) estado.ramo = 'laaapps';
+      if (!estado.ramo && extraido.produto) estado.ramo = 'personalizados';
       if (extraido.nome) {
         estado.dadosIA.nome = extraido.nome;
         estado.dadosApps.nome = extraido.nome;
+        estado.dadosFelicia.nome = extraido.nome;
       }
       if (estado.ramo === 'laaapps') {
         const a = estado.dadosApps;
@@ -544,6 +615,10 @@ function criarConversaIA(deps) {
         if (extraido.negocio) a.negocio = extraido.negocio;
         if (extraido.contato) a.contato = extraido.contato;
         if (extraido.detalhes) a.detalhes = extraido.detalhes;
+      } else if (estado.ramo === 'personalizados') {
+        const p = estado.dadosFelicia;
+        if (extraido.produto) p.produto = extraido.produto;
+        if (extraido.detalhes) p.detalhes = extraido.detalhes;
       } else {
         const d = estado.dadosIA;
         if (extraido.endereco) d.endereco = extraido.endereco;
@@ -582,6 +657,33 @@ function criarConversaIA(deps) {
           msg = '';
         }
         if (!msg || contemPreco(msg)) msg = mensagemConfirmacaoApp(a);
+        estado.historicoIA.push({ papel: 'assistente', texto: msg });
+        salvarEstados();
+        await enviarWhatsApp(telefone, msg);
+        return;
+      }
+    } else if (estado.ramo === 'personalizados') {
+      const p = estado.dadosFelicia;
+      const completoPers = !!(p.nome && p.produto);
+      if (completoPers && !estado.iaLeadSalvo) {
+        salvarLead(telefone, {
+          nome: p.nome,
+          area: 'personalizados',
+          endereco: '',
+          servico: p.produto.slice(0, 300),
+          projeto: (p.detalhes || '').slice(0, 500),
+        });
+        estado.iaLeadSalvo = true;
+        estado.etapa = 'concluido';
+        salvarEstados();
+
+        let msg = '';
+        try {
+          msg = await gerarResposta(estado, true);
+        } catch (_) {
+          msg = '';
+        }
+        if (!msg || contemPreco(msg)) msg = mensagemConfirmacaoFelicia(p);
         estado.historicoIA.push({ papel: 'assistente', texto: msg });
         salvarEstados();
         await enviarWhatsApp(telefone, msg);
@@ -626,7 +728,9 @@ function criarConversaIA(deps) {
       resposta =
         estado.ramo === 'laaapps'
           ? respostaSeguraPrecoApps(estado.dadosApps)
-          : respostaSeguraPreco(estado.dadosIA);
+          : estado.ramo === 'personalizados'
+            ? respostaSeguraPrecoFelicia(estado.dadosFelicia)
+            : respostaSeguraPreco(estado.dadosIA);
     }
     estado.historicoIA.push({ papel: 'assistente', texto: resposta });
     salvarEstados();
