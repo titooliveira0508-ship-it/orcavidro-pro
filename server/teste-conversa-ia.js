@@ -22,10 +22,13 @@
 //      e o cliente continua sendo atendido
 //   9) Timeout do Gemini → exatamente 1 nova tentativa antes de
 //      acertar; erro 4xx (404) não retenta e cai pro próximo provedor
-//  10) Gemini fora do ar (404) → a INVISION assume: saudação do Grupo
-//      Oliveira, conversa completa e lead salvo. Sem INVISION_API_KEY
-//      ela é pulada; com TODOS os provedores fora, segue o erro de
-//      "IA indisponível" (quem chama cai pro formulário, como hoje)
+//  10) INVISION é o provedor PRINCIPAL: com a chave configurada, ela é
+//      chamada PRIMEIRO (antes do Gemini e da OpenAI) e a chamada NÃO
+//      leva `temperature` (o gateway rejeita o parâmetro). Conversa
+//      completa por ela: saudação do Grupo Oliveira e lead salvo. Sem
+//      INVISION_API_KEY ela é pulada; com TODOS os provedores fora,
+//      segue o erro de "IA indisponível" (quem chama cai pro
+//      formulário, como hoje)
 //
 // Uso: node teste-conversa-ia.js
 
@@ -217,7 +220,8 @@ async function enviarMensagem(porta, telefone, texto, id, secret = APP_SECRET) {
 // ─── Nova tentativa do Gemini após timeout (axios stubado) ──────────────────
 // chamarIA não é exercitado pelo mock (IA_MOCK atalha antes do provedor
 // real), então aqui o axios é stubado e o módulo é recarregado com uma
-// chave de teste: timeout na 1ª chamada, sucesso na 2ª.
+// chave de teste: timeout na 1ª chamada, sucesso na 2ª. Sem
+// INVISION_API_KEY neste cenário, o Gemini abre a cadeia.
 async function testarRetentativaGemini() {
   console.log('\n── Nova tentativa do Gemini após timeout ──');
   const axios = require('axios');
@@ -225,6 +229,7 @@ async function testarRetentativaGemini() {
   const envAnterior = {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    INVISION_API_KEY: process.env.INVISION_API_KEY,
     IA_MOCK: process.env.IA_MOCK,
   };
   try {
@@ -242,6 +247,7 @@ async function testarRetentativaGemini() {
     };
     process.env.GEMINI_API_KEY = 'chave-de-teste-retry';
     process.env.OPENAI_API_KEY = '';
+    process.env.INVISION_API_KEY = '';
     process.env.IA_MOCK = '';
     delete require.cache[require.resolve('./ia')];
     const iaRetry = require('./ia');
@@ -283,13 +289,13 @@ async function testarRetentativaGemini() {
   }
 }
 
-// ─── Fallback Invision: Gemini fora → Invision responde (axios stubado) ─────
+// ─── Invision principal: 1ª da cadeia e SEM temperature (axios stubado) ─────
 // Mesmo esquema do teste de retentativa: o provedor de verdade não é
 // exercitado pelo mock, então o axios é stubado por URL e o módulo é
 // recarregado com chaves de teste. O stub da Invision imita as respostas
-// do provedor mock (saudação/extração) pra conversa fluir até o lead.
-async function testarFallbackInvision() {
-  console.log('\n── Fallback Invision (Gemini fora do ar) ──');
+// do provedor mock (saudação/extração) pra conversa fluir até o lead.
+async function testarInvisionPrincipal() {
+  console.log('\n── Invision principal (1ª da cadeia, sem temperature) ──');
   const axios = require('axios');
   const postOriginal = axios.post;
   const envAnterior = {
@@ -320,7 +326,9 @@ async function testarFallbackInvision() {
       }
       if (url.includes('api.openai.com')) {
         chamadas.push('openai');
-        throw new Error('OpenAI não deveria ser chamada neste cenário');
+        const erro = new Error('Request failed with status code 500');
+        erro.response = { status: 500, data: { error: { message: 'erro interno simulado' } } };
+        throw erro;
       }
       if (url.includes('invision.dreamvision.com.br')) {
         chamadas.push('invision');
@@ -374,14 +382,16 @@ async function testarFallbackInvision() {
 
     const iaInv = recarregar({
       GEMINI_API_KEY: 'chave-gemini-teste',
-      OPENAI_API_KEY: '',
+      OPENAI_API_KEY: 'chave-openai-teste',
       INVISION_API_KEY: 'chave-invision-teste',
       INVISION_MODEL: '',
       IA_MOCK: '',
     });
-    ok(iaInv.IA_ATIVA === true, 'IA ativa com Gemini + Invision configurados');
+    ok(iaInv.IA_ATIVA === true, 'IA ativa com Invision + Gemini + OpenAI configurados');
 
-    // 1) Chamada direta: Gemini 404 → OpenAI pulada (sem chave) → Invision.
+    // 1) Chamada direta com TODOS os provedores configurados: a Invision
+    //    responde PRIMEIRO — Gemini e OpenAI nem são chamados. E o corpo
+    //    da chamada NÃO pode levar `temperature` (o gateway rejeita).
     const sistemaTeste = 'sistema de teste\ninicio: sim';
     chamadas.length = 0;
     const textoDireto = await iaInv.chamarIA({
@@ -389,10 +399,10 @@ async function testarFallbackInvision() {
       mensagens: [{ papel: 'cliente', texto: 'Boa noite' }],
       json: false,
     });
-    ok(/Grupo Oliveira/.test(textoDireto), 'Gemini fora do ar → quem responde é a Invision');
+    ok(/Grupo Oliveira/.test(textoDireto), 'quem responde é a Invision (provedor principal)');
     ok(
-      chamadas.join(',') === 'gemini,invision',
-      `ordem da cadeia: Gemini → Invision, OpenAI pulada sem chave (${chamadas.join(' → ')})`
+      chamadas.join(',') === 'invision',
+      `Invision chamada PRIMEIRO e sozinha, com todos configurados (${chamadas.join(' → ')})`
     );
     ok(
       !!ultimaInvision && ultimaInvision.url === 'https://invision.dreamvision.com.br/v1/chat/completions',
@@ -415,6 +425,29 @@ async function testarFallbackInvision() {
     ok(
       !!ultimaInvision && ultimaInvision.config.timeout === 45000,
       'Invision usa o mesmo timeout das outras chamadas (45000ms)'
+    );
+    ok(
+      !!ultimaInvision && ultimaInvision.body.max_tokens === 600,
+      'corpo da Invision mantém max_tokens 600'
+    );
+    ok(
+      !!ultimaInvision && !('temperature' in ultimaInvision.body),
+      'corpo da Invision NÃO leva temperature (o gateway rejeita o parâmetro)'
+    );
+
+    // 1b) Modo extração (json): response_format continua presente e o
+    //     temperature continua de fora.
+    await iaInv.chamarIA({
+      sistema: 'extração de teste',
+      mensagens: [{ papel: 'cliente', texto: 'Meu nome é Carlos Eduardo' }],
+      json: true,
+    });
+    ok(
+      !!ultimaInvision &&
+        ultimaInvision.body.response_format &&
+        ultimaInvision.body.response_format.type === 'json_object' &&
+        !('temperature' in ultimaInvision.body),
+      'no modo extração: response_format json_object presente e temperature continua fora'
     );
 
     // 2) Conversa completa pela Invision: saudação → dados → lead salvo.
@@ -454,8 +487,10 @@ async function testarFallbackInvision() {
       'confirmação do pedido enviada ao cliente via Invision'
     );
 
-    // 3) TODOS os provedores fora → mesmo erro de hoje ("IA indisponível").
+    // 3) TODOS os provedores fora → mesmo erro de hoje ("IA indisponível"),
+    //    depois de percorrer a cadeia inteira na ordem nova.
     invisionFalha = true;
+    chamadas.length = 0;
     let erroTodos = null;
     try {
       await iaInv.chamarIA({
@@ -468,8 +503,19 @@ async function testarFallbackInvision() {
     }
     invisionFalha = false;
     ok(
-      !!erroTodos && /IA indisponível/.test(erroTodos.message) && /invision/i.test(erroTodos.message),
+      !!erroTodos && /IA indisponível/.test(erroTodos.message),
       'todos os provedores fora → erro "IA indisponível" (index.js cai pro formulário)'
+    );
+    ok(
+      chamadas.join(',') === 'invision,gemini,openai',
+      `ordem completa da cadeia: Invision → Gemini → OpenAI (${chamadas.join(' → ')})`
+    );
+    ok(
+      !!erroTodos &&
+        /invision/i.test(erroTodos.message) &&
+        /gemini/i.test(erroTodos.message) &&
+        /openai/i.test(erroTodos.message),
+      'erro final cita os três provedores que falharam'
     );
 
     // 4) Sem INVISION_API_KEY, a Invision nunca é chamada.
@@ -492,8 +538,8 @@ async function testarFallbackInvision() {
       erroSem = e;
     }
     ok(
-      !!erroSem && !chamadas.includes('invision'),
-      'sem INVISION_API_KEY, a Invision é pulada (comportamento atual preservado)'
+      !!erroSem && !chamadas.includes('invision') && chamadas.join(',') === 'gemini',
+      'sem INVISION_API_KEY, a Invision é pulada e o Gemini abre a cadeia (comportamento preservado)'
     );
 
     // 5) Só a Invision configurada já ativa a IA.
@@ -703,7 +749,7 @@ async function cenarioFallback() {
 
 (async () => {
   await testarRetentativaGemini();
-  await testarFallbackInvision();
+  await testarInvisionPrincipal();
   await cenarioIA();
   await cenarioApps();
   await cenarioFallbackApps();
