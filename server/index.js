@@ -1,6 +1,7 @@
 // ─── OrçaVidro Pro · Bot de WhatsApp (primeiro atendimento) ─────────────────
 // Bot conversacional inteligente: o cliente fala livremente, o bot identifica
-// o nicho (vidraçaria ou LAA-APPS) e conduz com mensagens naturais e variadas.
+// o nicho (vidraçaria, LAA-APPS ou Felícia Personalizados) e conduz com
+// mensagens naturais e variadas.
 // O bot NUNCA fala de preços/valores — isso é só com o Tito.
 //
 // Variáveis de ambiente (ver server/README.md):
@@ -65,8 +66,9 @@ const PALAVRAS_PRECO = [
 ];
 
 // ─── Estado da conversa (por telefone) ──────────────────────────────────────
-// estados: inicio → escolhendo_area → (vidraçaria: aguardando_nome → aguardando_endereco → aguardando_servico → concluido)
-//                                → (laa-apps: aguardando_nome_app → aguardando_projeto → concluido)
+// estados: inicio → ouvindo/perguntando_nicho → (vidraçaria: vid_nome → vid_endereco → vid_servico → concluido)
+//                                → (laa-apps: app_nome → app_projeto → concluido)
+//                                → (personalizados: pers_nome → pers_produto → concluido)
 let estados = {};
 try {
   if (fs.existsSync(STATE_FILE)) {
@@ -145,6 +147,11 @@ const PALAVRAS_APPS = [
   'app', 'aplicativo', 'sistema', 'site', 'software', 'programa', 'plataforma',
   'loja virtual', 'ecommerce', 'e-commerce', 'agendamento', 'delivery',
 ];
+// Palavras que indicam Felícia Personalizados (brindes/personalizados)
+// (sem 'copo': copo de vidro é vidraçaria)
+const PALAVRAS_PERSONALIZADOS = [
+  'brinde', 'personaliz', 'caneca', 'grava', 'laser', 'sublima', 'dtf',
+];
 
 // Mensagens naturais estilo WhatsApp — curtas, casuais, como gente de verdade fala
 const MSGS = {
@@ -189,9 +196,17 @@ const MSGS = {
     'Fechou! ✅ Ideia anotada.\n\nA *LAA-APPS* te chama em breve. Valeu! 🙏',
     'Show! ✅ Já registrei tudo.\n\nA *LAA-APPS* entra em contato pra conversar do projeto. Obrigado! 🙏',
   ],
+  pedeProduto: [
+    'O que cê quer personalizar? Me conta o produto ou a ideia 🎁',
+    'Me fala aí: qual produto ou ideia cê quer fazer? 🎁',
+  ],
+  confirmaPersonalizados: [
+    'Fechou! ✅ Já anotei tudo.\n\nA *Felícia Personalizados* te chama em breve. Valeu! 🙏',
+    'Pronto! ✅ Tá tudo anotado.\n\nA *Felícia Personalizados* entra em contato já já. Obrigado! 🙏',
+  ],
   perguntaNicho: [
-    'É sobre vidro/box 🪟 ou sobre app/sistema 📱?',
-    'Me diz: vidraçaria 🪟 ou aplicativo 📱?',
+    'É sobre vidro/box 🪟, app/sistema 📱 ou brindes/personalizados 🎁?',
+    'Me diz: vidraçaria 🪟, aplicativo 📱 ou personalizados 🎁?',
   ],
   // Reações que ecoam o que a pessoa disse (parece que tá ouvindo de verdade)
   reacaoVidro: [
@@ -203,6 +218,11 @@ const MSGS = {
     'Ah, aplicativo! 📱 Massa!',
     'Saquei, é app/sistema! 📱 Boa!',
     'Opa, parte de tecnologia! 📱 Curti!',
+  ],
+  reacaoPersonalizados: [
+    'Ah, personalizados! 🎁 Boa!',
+    'Saquei, é brinde/personalizado! 🎁 Show!',
+    'Opa, parte da Felícia Personalizados! 🎁 Massa!',
   ],
 };
 
@@ -218,11 +238,12 @@ function msgVariada(telefone, lista) {
 
 function detectarNicho(texto) {
   const t = texto.toLowerCase();
-  const ehVidro = PALAVRAS_VIDRACARIA.some((p) => t.includes(p));
-  const ehApp = PALAVRAS_APPS.some((p) => t.includes(p));
-  if (ehVidro && !ehApp) return 'vidracaria';
-  if (ehApp && !ehVidro) return 'laaapps';
-  if (ehVidro && ehApp) return 'ambos';
+  const achados = [];
+  if (PALAVRAS_VIDRACARIA.some((p) => t.includes(p))) achados.push('vidracaria');
+  if (PALAVRAS_APPS.some((p) => t.includes(p))) achados.push('laaapps');
+  if (PALAVRAS_PERSONALIZADOS.some((p) => t.includes(p))) achados.push('personalizados');
+  if (achados.length === 1) return achados[0];
+  if (achados.length > 1) return 'ambos';
   return null;
 }
 
@@ -232,7 +253,8 @@ function textoBoasVindas() {
     'Olá! 👋 Bem-vindo(a)!\n\n' +
     'Sou o assistente virtual. Com o que posso te ajudar?\n\n' +
     'Digite *1* para 🪟 *M. Oliveira Envidraçamentos* (vidros, boxes, espelhos)\n' +
-    'Digite *2* para 📱 *LAA-APPS* (aplicativos e sistemas)'
+    'Digite *2* para 📱 *LAA-APPS* (aplicativos e sistemas)\n' +
+    'Digite *3* para 🎁 *Felícia Personalizados* (brindes e produtos personalizados)'
   );
 }
 
@@ -304,7 +326,12 @@ function salvarLead(telefone, dados) {
   const lead = {
     nome: dados.nome,
     telefone,
-    area: dados.area === 'laaapps' ? 'LAA-APPS' : 'M. Oliveira Envidraçamentos',
+    area:
+      dados.area === 'laaapps'
+        ? 'LAA-APPS'
+        : dados.area === 'personalizados'
+          ? 'Felícia Personalizados'
+          : 'M. Oliveira Envidraçamentos',
     endereco: dados.endereco || '',
     servico: dados.servico || '',
     projeto: dados.projeto || '',
@@ -399,6 +426,35 @@ async function processarMensagemPrincipal(telefone, texto) {
       }
       return;
     }
+    if (est0.ramo === 'personalizados') {
+      // Ramo de brindes/personalizados (Felícia Personalizados): o
+      // formulário de vidraçaria não serve aqui. Atendimento básico e
+      // EDUCADO usando as etapas próprias do formulário (pers_nome →
+      // pers_produto): pede nome e o produto/ideia e salva o lead da
+      // Felícia pela mesma salvarLead.
+      est0.modoFormulario = true;
+      est0.area = 'personalizados';
+      const nomePers = (est0.dadosFelicia && est0.dadosFelicia.nome) || '';
+      if (nomePers) {
+        est0.nome = nomePers;
+        est0.etapa = 'pers_produto';
+        salvarEstados();
+        await enviarWhatsApp(
+          telefone,
+          'Oi! 😊 Tive uma instabilidade rápida aqui, mas já recuperei. ' +
+            msgVariada(telefone, MSGS.pedeProduto)
+        );
+      } else {
+        est0.etapa = 'pers_nome';
+        salvarEstados();
+        await enviarWhatsApp(
+          telefone,
+          'Oi! 😊 Tive uma instabilidade rápida aqui, mas seguimos! ' +
+            msgVariada(telefone, MSGS.pedeNome)
+        );
+      }
+      return;
+    }
     const est = cairParaFormulario(telefone);
     if (est.nome && est.endereco && est.servico) {
       // Já tinha tudo: salva o lead e confirma, igual ao formulário faria.
@@ -453,9 +509,10 @@ async function processarMensagem(telefone, textoRecebido) {
     await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.preco));
     // Reenvia a pergunta atual
     const rep = {
-      vid_nome: MSGS.pedeNome, app_nome: MSGS.pedeNome,
+      vid_nome: MSGS.pedeNome, app_nome: MSGS.pedeNome, pers_nome: MSGS.pedeNome,
       vid_endereco: MSGS.pedeEndereco, vid_servico: MSGS.pedeServico,
-      app_projeto: MSGS.pedeProjeto, perguntando_nicho: MSGS.perguntaNicho,
+      app_projeto: MSGS.pedeProjeto, pers_produto: MSGS.pedeProduto,
+      perguntando_nicho: MSGS.perguntaNicho,
     }[estado.etapa];
     if (rep) await enviarWhatsApp(telefone, msgVariada(telefone, rep));
     else if (estado.etapa === 'inicio' || estado.etapa === 'ouvindo') {
@@ -487,6 +544,11 @@ async function processarMensagem(telefone, textoRecebido) {
         estado.etapa = 'app_nome';
         salvarEstados();
         await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.reacaoApp) + ' ' + msgVariada(telefone, MSGS.pedeNome));
+      } else if (nicho === 'personalizados') {
+        estado.area = 'personalizados';
+        estado.etapa = 'pers_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.reacaoPersonalizados) + ' ' + msgVariada(telefone, MSGS.pedeNome));
       } else {
         estado.etapa = 'perguntando_nicho';
         salvarEstados();
@@ -508,6 +570,11 @@ async function processarMensagem(telefone, textoRecebido) {
         estado.etapa = 'app_nome';
         salvarEstados();
         await enviarWhatsApp(telefone, 'Fechado! 📱 ' + msgVariada(telefone, MSGS.pedeNome));
+      } else if (nicho === 'personalizados' || t === '3' || t.includes('brinde') || t.includes('personaliz')) {
+        estado.area = 'personalizados';
+        estado.etapa = 'pers_nome';
+        salvarEstados();
+        await enviarWhatsApp(telefone, 'Fechado! 🎁 ' + msgVariada(telefone, MSGS.pedeNome));
       } else {
         await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.perguntaNicho));
       }
@@ -602,6 +669,37 @@ async function processarMensagem(telefone, textoRecebido) {
         telefone,
         `✅ *Dados confirmados!*\n\n👤 ${estado.nome}\n💡 ${estado.projeto}\n\n` +
         msgVariada(telefone, MSGS.confirmaApp)
+      );
+      break;
+    }
+
+    case 'pers_nome': {
+      if (!texto || texto.length < 2) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeNome));
+        break;
+      }
+      estado.nome = texto.slice(0, 80);
+      const primeiroNome = estado.nome.split(' ')[0];
+      estado.etapa = 'pers_produto';
+      salvarEstados();
+      await enviarWhatsApp(telefone, `Prazer, ${primeiroNome}! 😊 ` + msgVariada(telefone, MSGS.pedeProduto));
+      break;
+    }
+
+    case 'pers_produto': {
+      if (!texto || texto.length < 3) {
+        await enviarWhatsApp(telefone, msgVariada(telefone, MSGS.pedeProduto));
+        break;
+      }
+      // O produto/ideia vai no campo "servico" do lead (a area diferencia).
+      estado.servico = texto.slice(0, 200);
+      estado.etapa = 'concluido';
+      salvarEstados();
+      salvarLead(telefone, estado);
+      await enviarWhatsApp(
+        telefone,
+        `✅ *Dados confirmados!*\n\n👤 ${estado.nome}\n🎁 ${estado.servico}\n\n` +
+        msgVariada(telefone, MSGS.confirmaPersonalizados)
       );
       break;
     }
