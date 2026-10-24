@@ -16,15 +16,16 @@
 // a IA identifica o ramo pelo assunto e segue direto.
 //
 // Cadeia de provedores:
-//   1) Gemini (GEMINI_API_KEY) — provedor principal, mesma chave já usada
-//      nos outros projetos do Tito.
-//   2) OpenAI gpt-4o-mini (OPENAI_API_KEY) — SÓ entra se a variável existir
-//      E o Gemini falhar.
-//   3) Invision (INVISION_API_KEY) — gateway compatível com OpenAI, camada
-//      extra de fallback: SÓ entra se a variável existir E os anteriores
-//      falharem. (Entrou porque o gemini-3.8-flash, em produção, aceita a
-//      chamada mas nunca responde — timeout atrás de timeout e o bot caía
-//      pro formulário seco; a Invision responde em segundos.)
+//   1) Invision (INVISION_API_KEY) — provedor PRINCIPAL quando a variável
+//      existe: gateway compatível com OpenAI que responde em segundos.
+//      (Virou o principal porque o gemini-3.8-flash, em produção, aceita
+//      a chamada mas NUNCA responde: eram 45s + 45s de espera morta por
+//      conversa antes de chegar nela — o Tito mesmo notou: "gemini ta de
+//      frente ainda".)
+//   2) Gemini (GEMINI_API_KEY) — fallback da Invision, com UMA nova
+//      tentativa em timeout/erro de rede/5xx antes de desistir.
+//   3) OpenAI gpt-4o-mini (OPENAI_API_KEY) — último fallback: SÓ entra se
+//      a variável existir E os anteriores falharem.
 //   4) Se a IA falhar/indisponível → quem chama (index.js) cai para o
 //      formulário atual. O robô NUNCA fica mudo.
 //
@@ -33,12 +34,12 @@
 // (regex) antes de ser enviada — se disparar, entra uma resposta segura.
 //
 // Variáveis de ambiente:
-//   GEMINI_API_KEY  – chave do Gemini (obrigatória p/ IA, sem ela = formulário)
-//   GEMINI_MODEL    – modelo Gemini (padrão: gemini-3.8-flash)
-//   OPENAI_API_KEY  – chave da OpenAI (opcional; ativa o fallback extra)
-//   OPENAI_MODEL    – modelo OpenAI (padrão: gpt-4o-mini)
-//   INVISION_API_KEY – chave da Invision (opcional; ativa o fallback extra)
+//   INVISION_API_KEY – chave da Invision (opcional; existindo, é o provedor PRINCIPAL)
 //   INVISION_MODEL  – modelo Invision (padrão: openai/gpt-6-astra-invision)
+//   GEMINI_API_KEY  – chave do Gemini (opcional; fallback da Invision)
+//   GEMINI_MODEL    – modelo Gemini (padrão: gemini-3.8-flash)
+//   OPENAI_API_KEY  – chave da OpenAI (opcional; último fallback da cadeia)
+//   OPENAI_MODEL    – modelo OpenAI (padrão: gpt-4o-mini)
 //   CONVERSA_IA=off – desliga a IA e usa só o formulário
 //   IA_MOCK=1       – provedor falso determinístico, SÓ para testes locais.
 //                     Nunca configurar em produção.
@@ -115,10 +116,13 @@ async function chamarOpenAI({ sistema, mensagens, json }) {
 
 // Invision: gateway compatível com a API da OpenAI — mesmo formato de
 // chamada/resposta do chamarOpenAI, muda só o endereço, a chave e o modelo.
+// ATENÇÃO: NÃO enviar `temperature` aqui — o modelo padrão da Invision
+// REJEITA o parâmetro (erro do gateway: "aceita sampling somente com
+// esforço none") e a chamada inteira falha na hora. Sem temperature,
+// o gateway usa o padrão do próprio modelo.
 async function chamarInvision({ sistema, mensagens, json }) {
   const body = {
     model: INVISION_MODEL,
-    temperature: 0.6,
     max_tokens: 600,
     messages: [
       { role: 'system', content: sistema },
@@ -267,8 +271,22 @@ async function chamarIA(args) {
     return provedorMock(args);
   }
   const erros = [];
+  // 1) Invision — provedor principal quando a chave existe (responde em
+  //    segundos; o Gemini atual aceita a chamada mas nunca responde).
+  if (INVISION_API_KEY) {
+    try {
+      return await chamarInvision(args);
+    } catch (e) {
+      const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
+      erros.push(`invision: ${det}`);
+      console.log('⚠️  Invision falhou:', det);
+    }
+  }
+  // 2) Gemini — fallback da Invision (a nova tentativa em timeout/rede/5xx
+  //    continua valendo, logo abaixo).
   if (GEMINI_API_KEY) {
     try {
+      if (INVISION_API_KEY) console.log('↪️  Tentando fallback Gemini…');
       return await chamarGemini(args);
     } catch (e) {
       const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
@@ -287,6 +305,7 @@ async function chamarIA(args) {
       }
     }
   }
+  // 3) OpenAI — último fallback da cadeia.
   if (OPENAI_API_KEY) {
     try {
       console.log('↪️  Tentando fallback OpenAI…');
@@ -295,16 +314,6 @@ async function chamarIA(args) {
       const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
       erros.push(`openai: ${det}`);
       console.log('⚠️  OpenAI falhou:', det);
-    }
-  }
-  if (INVISION_API_KEY) {
-    try {
-      console.log('↪️  Tentando fallback Invision…');
-      return await chamarInvision(args);
-    } catch (e) {
-      const det = e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message;
-      erros.push(`invision: ${det}`);
-      console.log('⚠️  Invision falhou:', det);
     }
   }
   throw new Error('IA indisponível (' + (erros.join(' | ') || 'nenhum provedor configurado') + ')');
